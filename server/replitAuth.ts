@@ -57,7 +57,9 @@ function updateUserSession(
 async function upsertUser(
   claims: any,
 ) {
-  await storage.upsertUser({
+  // Extract user ID from claims and create/update user record
+  const userId = claims["sub"];
+  await storage.upsertUserWithId(userId, {
     email: claims["email"],
     firstName: claims["first_name"],
     lastName: claims["last_name"],

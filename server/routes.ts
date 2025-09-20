@@ -180,6 +180,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.updateGame(gameId, gameUpdates);
       
+      // If it's an AI game and it's now the AI's turn, generate AI move
+      if (game.gameMode === 'ai' && !game.player2Id && !isWin) {
+        // Generate AI move after a short delay
+        setTimeout(async () => {
+          try {
+            const updatedGame = await storage.getGame(gameId);
+            if (!updatedGame || updatedGame.status !== 'active') return;
+            
+            const aiGuess = GameEngine.generateAIGuess('standard');
+            const aiValidation = GameEngine.validateNumber(aiGuess);
+            
+            if (aiValidation.isValid) {
+              const playerSecret = updatedGame.player1Secret;
+              if (playerSecret) {
+                const aiFeedback = GameEngine.calculateFeedback(aiGuess, playerSecret);
+                const aiIsWin = GameEngine.checkWinCondition(aiGuess, playerSecret);
+                
+                // Get AI move count
+                const existingMoves = await storage.getGameMoves(gameId);
+                const aiMoveNumber = existingMoves.filter(m => m.playerId === 'AI').length + 1;
+                
+                await storage.addGameMove({
+                  gameId,
+                  playerId: 'AI',
+                  guess: aiGuess,
+                  correctDigits: aiFeedback.correctDigits,
+                  correctPositions: aiFeedback.correctPositions,
+                  moveNumber: aiMoveNumber,
+                });
+                
+                const aiGameUpdates: any = {};
+                if (aiIsWin) {
+                  aiGameUpdates.status = 'finished';
+                  aiGameUpdates.winnerId = 'AI';
+                  aiGameUpdates.finishedAt = new Date();
+                } else {
+                  // Switch back to player's turn
+                  aiGameUpdates.currentTurn = updatedGame.player1Id;
+                }
+                
+                await storage.updateGame(gameId, aiGameUpdates);
+              }
+            }
+          } catch (error) {
+            console.error('AI move generation error:', error);
+          }
+        }, 1500); // 1.5 second delay for realistic AI thinking time
+      }
+      
       res.json({ move, feedback, isWin });
     } catch (error) {
       console.error("Error making move:", error);

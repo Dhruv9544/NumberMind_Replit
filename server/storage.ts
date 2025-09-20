@@ -22,6 +22,8 @@ export interface IStorage {
   // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  upsertUserWithId(id: string, user: UpsertUser): Promise<User>;
+  initializeAIUser(): Promise<void>;
   
   // User stats operations
   getUserStats(userId: string): Promise<UserStats | undefined>;
@@ -55,6 +57,28 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db
       .insert(users)
       .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    
+    // Create initial stats if user is new
+    await this.upsertUserStats({ userId: user.id });
+    
+    return user;
+  }
+
+  async upsertUserWithId(id: string, userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({
+        id,
+        ...userData,
+      })
       .onConflictDoUpdate({
         target: users.id,
         set: {
@@ -124,6 +148,42 @@ export class DatabaseStorage implements IStorage {
   async addGameMove(move: InsertGameMove): Promise<GameMove> {
     const [moveRecord] = await db.insert(gameMoves).values(move).returning();
     return moveRecord;
+  }
+
+  async addAIGameMove(move: Omit<InsertGameMove, 'playerId'> & { playerId: string }): Promise<GameMove> {
+    const [moveRecord] = await db.insert(gameMoves).values(move).returning();
+    return moveRecord;
+  }
+
+  async initializeAIUser(): Promise<void> {
+    try {
+      // Check if AI user already exists
+      const existingAI = await this.getUser('AI');
+      if (existingAI) return;
+
+      // Create AI user record
+      await db.insert(users).values({
+        id: 'AI',
+        email: 'ai@numbermind.com',
+        firstName: 'AI',
+        lastName: 'Assistant',
+        profileImageUrl: null,
+      }).onConflictDoNothing();
+
+      // Create AI user stats
+      await db.insert(userStats).values({
+        userId: 'AI',
+        gamesPlayed: 0,
+        gamesWon: 0,
+        currentStreak: 0,
+        bestStreak: 0,
+        totalGuesses: 0,
+      }).onConflictDoNothing();
+
+      console.log('AI user initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize AI user:', error);
+    }
   }
 
   async getGameMoves(gameId: string): Promise<GameMove[]> {
