@@ -56,12 +56,17 @@ async function upsertUser(
 ) {
   // Extract user ID from claims and create/update user record
   const userId = claims["sub"];
-  await storage.upsertUserWithId(userId, {
-    email: claims["email"],
-    firstName: claims["first_name"],
-    lastName: claims["last_name"],
-    profileImageUrl: claims["profile_image_url"],
-  });
+  try {
+    await storage.upsertUserWithId(userId, {
+      email: claims["email"],
+      firstName: claims["first_name"],
+      lastName: claims["last_name"],
+      profileImageUrl: claims["profile_image_url"],
+    });
+  } catch (error) {
+    // Log error but don't crash - user session will still be created
+    console.error("Failed to upsert user:", error);
+  }
 }
 
 export async function setupAuth(app: Express) {
