@@ -7,24 +7,29 @@ import { useNumberInput } from '@/components/GameComponents';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Zap, Loader2, Users } from 'lucide-react';
+import { ArrowLeft, Zap, Loader2, Users, Search, Clock } from 'lucide-react';
 
 export default function GameSetup() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [gameMode, setGameMode] = useState<string>('ai');
-  const [selectedFriend, setSelectedFriend] = useState<string | null>(null);
+  const [selectedFriend, setSelectedFriend] = useState<{ id: string; name: string } | null>(null);
   const [showFriendPicker, setShowFriendPicker] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot } = useNumberInput();
-  
-  // Mock friends list - in real app would come from API
-  const mockFriends = [
-    { id: 'friend-1', name: 'Alice Johnson', email: 'alice@example.com' },
-    { id: 'friend-2', name: 'Bob Smith', email: 'bob@example.com' },
-    { id: 'friend-3', name: 'Carol Davis', email: 'carol@example.com' },
-  ];
+
+  // Search users API
+  const { data: searchResults = [] } = useQuery({
+    queryKey: ['/api/search/users', searchQuery],
+    enabled: searchQuery.length >= 2 && gameMode === 'friend' && showFriendPicker,
+    queryFn: async () => {
+      if (searchQuery.length < 2) return [];
+      const response = await apiRequest('GET', `/api/search/users?q=${encodeURIComponent(searchQuery)}`, {});
+      return response.json();
+    },
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -38,13 +43,11 @@ export default function GameSetup() {
         throw new Error('Please select a friend to challenge');
       }
       
-      const friendName = gameMode === 'friend' ? mockFriends.find(f => f.id === selectedFriend)?.name : undefined;
-      
       const response = await apiRequest('POST', '/api/games', { 
         gameMode,
         difficulty: 'standard',
-        friendId: gameMode === 'friend' ? selectedFriend : undefined,
-        friendName,
+        friendId: gameMode === 'friend' ? selectedFriend?.id : undefined,
+        friendName: gameMode === 'friend' ? selectedFriend?.name : undefined,
       });
       return response.json();
     },
@@ -69,6 +72,10 @@ export default function GameSetup() {
       return response.json();
     },
     onSuccess: (game) => {
+      toast({
+        title: 'Challenge Sent!',
+        description: `Waiting for ${selectedFriend?.name} to accept...`,
+      });
       setLocation(`/game/play/${game.id}`);
     },
     onError: (error: any) => {
@@ -83,8 +90,8 @@ export default function GameSetup() {
   const handleStart = () => {
     if (gameMode === 'friend' && !selectedFriend) {
       toast({
-        title: 'Select a Friend',
-        description: 'Please choose a friend to challenge',
+        title: 'Select a Player',
+        description: 'Please search and select a player to challenge',
         variant: 'destructive',
       });
       return;
@@ -104,7 +111,7 @@ export default function GameSetup() {
   const getOpponentName = () => {
     switch (gameMode) {
       case 'ai': return 'AI Assistant';
-      case 'friend': return selectedFriend ? mockFriends.find(f => f.id === selectedFriend)?.name || 'Friend' : 'Select Friend';
+      case 'friend': return selectedFriend?.name || 'Player to Challenge';
       case 'random': return 'Random Opponent';
       default: return 'Opponent';
     }
@@ -136,35 +143,73 @@ export default function GameSetup() {
           </div>
         </div>
 
-        {/* Friend Picker Modal */}
+        {/* User Search Modal */}
         {showFriendPicker && gameMode === 'friend' && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-            <Card className="w-full sm:max-w-md border-purple-500/30 bg-slate-900 backdrop-blur">
-              <CardHeader>
-                <CardTitle className="text-white">Challenge a Friend</CardTitle>
+            <Card className="w-full sm:max-w-md border-purple-500/30 bg-slate-900 backdrop-blur max-h-96 flex flex-col">
+              <CardHeader className="sticky top-0 bg-slate-900/95">
+                <CardTitle className="text-white">Search Player</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {mockFriends.map(friend => (
-                  <button
-                    key={friend.id}
-                    onClick={() => {
-                      setSelectedFriend(friend.id);
-                      setShowFriendPicker(false);
-                      toast({
-                        title: 'Friend Selected',
-                        description: `Challenge sent to ${friend.name}`,
-                      });
-                    }}
-                    className="w-full text-left p-3 rounded-lg bg-slate-800 hover:bg-purple-500/20 transition-colors border border-purple-500/20 hover:border-purple-500/50"
-                  >
-                    <div className="font-semibold text-white">{friend.name}</div>
-                    <div className="text-sm text-purple-300">{friend.email}</div>
-                  </button>
-                ))}
+              <CardContent className="space-y-3 flex-1 overflow-y-auto">
+                {/* Search Input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 w-4 h-4 text-purple-400" />
+                  <input
+                    type="text"
+                    placeholder="Enter username..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoFocus
+                    className="w-full pl-10 pr-4 py-2 bg-slate-800 text-white rounded-lg border border-purple-500/30 focus:border-purple-500 focus:outline-none placeholder-slate-500"
+                  />
+                </div>
+
+                {/* Search Results */}
+                {searchQuery.length >= 2 ? (
+                  <>
+                    {searchResults.length === 0 ? (
+                      <div className="text-center py-6">
+                        <p className="text-purple-300 text-sm">No players found</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {searchResults.map((result: any) => (
+                          <button
+                            key={result.id}
+                            onClick={() => {
+                              setSelectedFriend({ id: result.id, name: result.name });
+                              setShowFriendPicker(false);
+                              setSearchQuery('');
+                              toast({
+                                title: 'Player Selected',
+                                description: `You're about to challenge ${result.name}!`,
+                              });
+                            }}
+                            className="w-full text-left p-3 rounded-lg bg-slate-800 hover:bg-purple-500/20 transition-colors border border-purple-500/20 hover:border-purple-500/50"
+                          >
+                            <div className="font-semibold text-white">{result.name}</div>
+                            <div className="text-xs text-purple-300">
+                              {result.stats?.gamesWon} wins • {result.stats?.winRate}% win rate
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-purple-300 text-sm">Type at least 2 characters to search</p>
+                  </div>
+                )}
+
+                {/* Cancel Button */}
                 <Button
-                  onClick={() => setShowFriendPicker(false)}
+                  onClick={() => {
+                    setShowFriendPicker(false);
+                    setSearchQuery('');
+                  }}
                   variant="outline"
-                  className="w-full mt-4 border-purple-500/30 text-purple-300"
+                  className="w-full border-purple-500/30 text-purple-300 mt-4"
                 >
                   Cancel
                 </Button>
@@ -176,24 +221,37 @@ export default function GameSetup() {
         {/* Instructions */}
         <Card className="mb-6 border-purple-500/20 bg-slate-900/50 backdrop-blur">
           <CardHeader>
-            <CardTitle className="text-white text-lg">How to Play</CardTitle>
+            <CardTitle className="text-white text-lg">How to Challenge</CardTitle>
           </CardHeader>
           <CardContent className="text-purple-200 text-sm space-y-2">
-            <p>• Pick a 4-digit secret number</p>
-            <p>• Your opponent will try to guess it</p>
-            <p>• First to guess the number wins!</p>
+            <div className="flex gap-2">
+              <div className="text-purple-400 font-bold">1.</div>
+              <p>Pick a 4-digit secret number</p>
+            </div>
+            <div className="flex gap-2">
+              <div className="text-purple-400 font-bold">2.</div>
+              <p>Search for a player to challenge</p>
+            </div>
+            <div className="flex gap-2">
+              <div className="text-purple-400 font-bold">3.</div>
+              <p>They have 5 minutes to accept</p>
+            </div>
+            <div className="flex gap-2">
+              <Clock className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <p className="text-yellow-300">Challenge expires after 5 minutes</p>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Friend Selection for Friend Mode */}
+        {/* Player Search Button for Friend Mode */}
         {gameMode === 'friend' && (
           <Button
             onClick={() => setShowFriendPicker(true)}
             variant="outline"
-            className="w-full mb-6 border-purple-500/30 text-purple-300 h-10 hover:bg-purple-500/10"
+            className="w-full mb-6 border-purple-500/30 text-purple-300 h-11 hover:bg-purple-500/10 font-semibold"
           >
             <Users className="w-4 h-4 mr-2" />
-            {selectedFriend ? mockFriends.find(f => f.id === selectedFriend)?.name : 'Select Friend to Challenge'}
+            {selectedFriend ? `Challenge ${selectedFriend.name}` : 'Search Player to Challenge'}
           </Button>
         )}
 
@@ -223,14 +281,14 @@ export default function GameSetup() {
               <Button
                 key={num}
                 onClick={() => inputDigit(num.toString())}
-                className="h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white transition-all hover:scale-105"
+                className="h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white transition-all active:scale-95"
               >
                 {num}
               </Button>
             ))}
             <Button
               onClick={() => inputDigit('0')}
-              className="col-span-2 h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white transition-all hover:scale-105"
+              className="col-span-2 h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white transition-all active:scale-95"
             >
               0
             </Button>
@@ -259,7 +317,7 @@ export default function GameSetup() {
           ) : (
             <>
               <Zap className="w-4 h-4 mr-2" />
-              Start Game
+              {gameMode === 'friend' ? 'Send Challenge' : 'Start Game'}
             </>
           )}
         </Button>
