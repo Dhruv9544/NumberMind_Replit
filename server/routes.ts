@@ -42,11 +42,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/games", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { gameMode, difficulty } = req.body;
+      const { gameMode, difficulty, friendId } = req.body;
+      
+      let player2Id = undefined;
+      
+      // Handle different game modes
+      if (gameMode === 'ai' || gameMode === 'random') {
+        // AI and random opponents are treated as AI games
+        player2Id = undefined;
+      } else if (gameMode === 'friend' && friendId) {
+        player2Id = friendId;
+      }
       
       const game = gameStore.createGame({
         player1Id: userId,
-        player2Id: gameMode === 'ai' ? undefined : undefined,
+        player2Id,
         gameMode,
         difficulty: difficulty || 'standard',
         status: 'waiting',
@@ -97,8 +107,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       game.player1Secret = secretNumber;
 
-      if (game.gameMode === 'ai') {
-        // Generate AI secret
+      if (game.gameMode === 'ai' || game.gameMode === 'random') {
+        // Generate AI secret for AI and random opponent modes
         game.player2Id = 'AI';
         game.player2Secret = GameEngine.generateRandomNumber();
         game.status = 'active';
@@ -166,7 +176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       gameStore.updateGame(gameId, game);
       
       // AI move after delay
-      if (game.gameMode === 'ai' && game.player2Id === 'AI' && !isWin) {
+      if ((game.gameMode === 'ai' || game.gameMode === 'random') && game.player2Id === 'AI' && !isWin) {
         setTimeout(() => {
           try {
             const updatedGame = gameStore.getGame(gameId);

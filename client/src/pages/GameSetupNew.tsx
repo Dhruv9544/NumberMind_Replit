@@ -4,18 +4,27 @@ import { useLocation, useParams } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNumberInput } from '@/components/GameComponents';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Zap, Loader2 } from 'lucide-react';
+import { ArrowLeft, Zap, Loader2, Users } from 'lucide-react';
 
 export default function GameSetup() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [gameMode, setGameMode] = useState<string>('ai');
+  const [selectedFriend, setSelectedFriend] = useState<string | null>(null);
+  const [showFriendPicker, setShowFriendPicker] = useState(false);
 
   const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot } = useNumberInput();
+  
+  // Mock friends list - in real app would come from API
+  const mockFriends = [
+    { id: 'friend-1', name: 'Alice Johnson', email: 'alice@example.com' },
+    { id: 'friend-2', name: 'Bob Smith', email: 'bob@example.com' },
+    { id: 'friend-3', name: 'Carol Davis', email: 'carol@example.com' },
+  ];
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -25,9 +34,14 @@ export default function GameSetup() {
 
   const createGameMutation = useMutation({
     mutationFn: async () => {
+      if (gameMode === 'friend' && !selectedFriend) {
+        throw new Error('Please select a friend to challenge');
+      }
+      
       const response = await apiRequest('POST', '/api/games', { 
         gameMode,
-        difficulty: 'standard'
+        difficulty: 'standard',
+        friendId: gameMode === 'friend' ? selectedFriend : undefined,
       });
       return response.json();
     },
@@ -64,6 +78,15 @@ export default function GameSetup() {
   });
 
   const handleStart = () => {
+    if (gameMode === 'friend' && !selectedFriend) {
+      toast({
+        title: 'Select a Friend',
+        description: 'Please choose a friend to challenge',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     if (!isComplete()) {
       toast({
         title: 'Invalid Number',
@@ -78,8 +101,8 @@ export default function GameSetup() {
   const getOpponentName = () => {
     switch (gameMode) {
       case 'ai': return 'AI Assistant';
-      case 'friend': return 'Friend';
-      case 'random': return 'Random Player';
+      case 'friend': return selectedFriend ? mockFriends.find(f => f.id === selectedFriend)?.name || 'Friend' : 'Select Friend';
+      case 'random': return 'Random Opponent';
       default: return 'Opponent';
     }
   };
@@ -110,6 +133,43 @@ export default function GameSetup() {
           </div>
         </div>
 
+        {/* Friend Picker Modal */}
+        {showFriendPicker && gameMode === 'friend' && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+            <Card className="w-full sm:max-w-md border-purple-500/30 bg-slate-900 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-white">Challenge a Friend</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {mockFriends.map(friend => (
+                  <button
+                    key={friend.id}
+                    onClick={() => {
+                      setSelectedFriend(friend.id);
+                      setShowFriendPicker(false);
+                      toast({
+                        title: 'Friend Selected',
+                        description: `Challenge sent to ${friend.name}`,
+                      });
+                    }}
+                    className="w-full text-left p-3 rounded-lg bg-slate-800 hover:bg-purple-500/20 transition-colors border border-purple-500/20 hover:border-purple-500/50"
+                  >
+                    <div className="font-semibold text-white">{friend.name}</div>
+                    <div className="text-sm text-purple-300">{friend.email}</div>
+                  </button>
+                ))}
+                <Button
+                  onClick={() => setShowFriendPicker(false)}
+                  variant="outline"
+                  className="w-full mt-4 border-purple-500/30 text-purple-300"
+                >
+                  Cancel
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Instructions */}
         <Card className="mb-6 border-purple-500/20 bg-slate-900/50 backdrop-blur">
           <CardHeader>
@@ -117,11 +177,22 @@ export default function GameSetup() {
           </CardHeader>
           <CardContent className="text-purple-200 text-sm space-y-2">
             <p>• Pick a 4-digit secret number</p>
-            <p>• All digits must be different</p>
             <p>• Your opponent will try to guess it</p>
             <p>• First to guess the number wins!</p>
           </CardContent>
         </Card>
+
+        {/* Friend Selection for Friend Mode */}
+        {gameMode === 'friend' && (
+          <Button
+            onClick={() => setShowFriendPicker(true)}
+            variant="outline"
+            className="w-full mb-6 border-purple-500/30 text-purple-300 h-10 hover:bg-purple-500/10"
+          >
+            <Users className="w-4 h-4 mr-2" />
+            {selectedFriend ? mockFriends.find(f => f.id === selectedFriend)?.name : 'Select Friend to Challenge'}
+          </Button>
+        )}
 
         {/* Number Input */}
         <div className="mb-6">
