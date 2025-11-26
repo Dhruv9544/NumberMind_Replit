@@ -52,7 +52,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white">NumberMind</h1>
-            <p className="text-purple-200 text-sm">Welcome back, {user?.firstName || 'Player'}</p>
+            <p className="text-purple-200 text-sm">@{user?.username || user?.firstName || 'Player'}</p>
           </div>
           <div className="flex gap-2">
             <Button

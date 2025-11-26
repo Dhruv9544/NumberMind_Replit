@@ -12,10 +12,12 @@ interface UserStats {
 interface User {
   id: string;
   email?: string;
+  username?: string;
   firstName?: string;
   lastName?: string;
   profileImageUrl?: string;
   stats?: UserStats;
+  usernameSet?: boolean;
 }
 
 export function useAuth() {

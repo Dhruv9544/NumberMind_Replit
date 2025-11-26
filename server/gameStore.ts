@@ -65,6 +65,7 @@ interface UserProfile {
   id: string;
   name: string;
   email: string;
+  username?: string;
   avatar?: string;
   bio?: string;
   stats: {

@@ -18,23 +18,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      let profile = gameStore.getProfile(userId);
+      
+      if (!profile) {
+        profile = gameStore.getOrCreateProfile(userId, {
+          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
+          email: req.user.claims.email,
+          avatar: req.user.claims.picture,
+        });
+      }
+
+      const username = profile?.username || '';
+      
       res.json({
         id: userId,
         email: req.user.claims.email,
+        username: username,
         firstName: req.user.claims.given_name,
         lastName: req.user.claims.family_name,
         profileImageUrl: req.user.claims.picture,
+        usernameSet: !!username && username.length > 0,
         stats: {
-          gamesPlayed: 0,
-          gamesWon: 0,
-          currentStreak: 0,
-          bestStreak: 0,
-          totalGuesses: 0,
+          gamesPlayed: profile?.stats?.gamesPlayed || 0,
+          gamesWon: profile?.stats?.gamesWon || 0,
+          currentStreak: profile?.stats?.currentStreak || 0,
+          bestStreak: profile?.stats?.bestStreak || 0,
+          totalGuesses: profile?.stats?.totalGuesses || 0,
         }
       });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Set username
+  app.post('/api/auth/set-username', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { username } = req.body;
+      
+      if (!username || username.length < 3) {
+        return res.status(400).json({ message: "Username must be at least 3 characters" });
+      }
+      
+      // Check if username already taken
+      const existing = gameStore.searchUsers(username);
+      if (existing.some((u: any) => u.id !== userId)) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+
+      let profile = gameStore.getProfile(userId);
+      if (!profile) {
+        profile = gameStore.getOrCreateProfile(userId, {
+          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
+          email: req.user.claims.email,
+          avatar: req.user.claims.picture,
+        });
+      }
+
+      profile.username = username;
+      gameStore.updateProfile(userId, profile);
+      
+      res.json({ success: true, username });
+    } catch (error) {
+      console.error("Error setting username:", error);
+      res.status(500).json({ message: "Failed to set username" });
     }
   });
 

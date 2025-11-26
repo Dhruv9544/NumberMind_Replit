@@ -221,16 +221,16 @@ export default function GameSetup() {
         {/* Instructions */}
         <Card className="mb-6 border-purple-500/20 bg-slate-900/50 backdrop-blur">
           <CardHeader>
-            <CardTitle className="text-white text-lg">How to Challenge</CardTitle>
+            <CardTitle className="text-white text-lg">Invite & Challenge</CardTitle>
           </CardHeader>
           <CardContent className="text-purple-200 text-sm space-y-2">
             <div className="flex gap-2">
               <div className="text-purple-400 font-bold">1.</div>
-              <p>Pick a 4-digit secret number</p>
+              <p>Pick your 4-digit secret number</p>
             </div>
             <div className="flex gap-2">
               <div className="text-purple-400 font-bold">2.</div>
-              <p>Search for a player to challenge</p>
+              <p>Search by username to invite friend</p>
             </div>
             <div className="flex gap-2">
               <div className="text-purple-400 font-bold">3.</div>
