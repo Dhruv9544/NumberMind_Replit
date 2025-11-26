@@ -5,32 +5,35 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
-import Landing from "@/pages/Landing";
-import Home from "@/pages/Home";
-import GameSetup from "@/pages/GameSetup";
-import GamePlay from "@/pages/GamePlay";
-import OpponentFeedback from "@/pages/OpponentFeedback";
+import Auth from "@/pages/Auth";
+import Dashboard from "@/pages/Dashboard";
+import GameSetup from "@/pages/GameSetupNew";
+import GamePlay from "@/pages/GamePlayNew";
 import GameResult from "@/pages/GameResult";
-import FriendChallenge from "@/pages/FriendChallenge";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  if (isLoading) {
+    return <div className="w-full h-screen flex items-center justify-center bg-slate-900" />;
+  }
+
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
+      {!isAuthenticated ? (
+        <>
+          <Route path="/" component={Auth} />
+          <Route component={Auth} />
+        </>
       ) : (
         <>
-          <Route path="/" component={Home} />
+          <Route path="/" component={Dashboard} />
           <Route path="/game/setup" component={GameSetup} />
           <Route path="/game/play/:gameId" component={GamePlay} />
-          <Route path="/game/feedback/:gameId" component={OpponentFeedback} />
           <Route path="/game/result/:gameId" component={GameResult} />
-          <Route path="/friends" component={FriendChallenge} />
+          <Route component={NotFound} />
         </>
       )}
-      <Route component={NotFound} />
     </Switch>
   );
 }

@@ -1,10 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { storage } from "./storage";
+import { gameStore } from "./gameStore";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { GameEngine } from "./gameEngine";
-import { z } from "zod";
 
 interface WSClient extends WebSocket {
   userId?: string;
@@ -19,9 +18,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      const stats = await storage.getUserStats(userId);
-      res.json({ ...user, stats });
+      res.json({
+        id: userId,
+        email: req.user.claims.email,
+        firstName: req.user.claims.given_name,
+        lastName: req.user.claims.family_name,
+        profileImageUrl: req.user.claims.picture,
+        stats: {
+          gamesPlayed: 0,
+          gamesWon: 0,
+          currentStreak: 0,
+          bestStreak: 0,
+          totalGuesses: 0,
+        }
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -32,11 +42,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/games", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { gameMode, difficulty, opponentId } = req.body;
+      const { gameMode, difficulty } = req.body;
       
-      const game = await storage.createGame({
+      const game = gameStore.createGame({
         player1Id: userId,
-        player2Id: gameMode === 'ai' ? null : opponentId,
+        player2Id: gameMode === 'ai' ? undefined : undefined,
         gameMode,
         difficulty: difficulty || 'standard',
         status: 'waiting',
@@ -52,14 +62,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/games/:gameId", isAuthenticated, async (req: any, res) => {
     try {
       const { gameId } = req.params;
-      const game = await storage.getGame(gameId);
+      const game = gameStore.getGame(gameId);
       
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
       
-      const moves = await storage.getGameMoves(gameId);
-      res.json({ ...game, moves });
+      res.json(game);
     } catch (error) {
       console.error("Error fetching game:", error);
       res.status(500).json({ message: "Failed to fetch game" });
@@ -77,35 +86,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: validation.error });
       }
       
-      const game = await storage.getGame(gameId);
+      const game = gameStore.getGame(gameId);
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
       
-      const updates: any = {};
-      if (game.player1Id === userId) {
-        updates.player1Secret = secretNumber;
-      } else if (game.player2Id === userId) {
-        updates.player2Secret = secretNumber;
-      } else {
+      if (game.player1Id !== userId) {
         return res.status(403).json({ message: "Not authorized" });
       }
-      
-      // Check if both secrets are set to start the game
-      if (game.player1Secret && game.player2Secret) {
-        updates.status = 'active';
-        updates.startedAt = new Date();
-        updates.currentTurn = game.player1Id;
-      } else if ((game.player1Secret || updates.player1Secret) && !game.player2Id) {
-        // AI game
-        updates.player2Secret = GameEngine.generateRandomNumber();
-        updates.status = 'active';
-        updates.startedAt = new Date();
-        updates.currentTurn = game.player1Id;
+
+      game.player1Secret = secretNumber;
+
+      if (game.gameMode === 'ai') {
+        // Generate AI secret
+        game.player2Id = 'AI';
+        game.player2Secret = GameEngine.generateRandomNumber();
+        game.status = 'active';
+        game.startedAt = new Date();
+        game.currentTurn = userId;
+      } else {
+        // Multiplayer - wait for other player
+        game.status = 'active';
+        game.startedAt = new Date();
+        game.currentTurn = userId;
       }
       
-      const updatedGame = await storage.updateGame(gameId, updates);
-      res.json(updatedGame);
+      gameStore.updateGame(gameId, game);
+      res.json(game);
     } catch (error) {
       console.error("Error setting secret:", error);
       res.status(500).json({ message: "Failed to set secret" });
@@ -123,7 +130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: validation.error });
       }
       
-      const game = await storage.getGame(gameId);
+      const game = gameStore.getGame(gameId);
       if (!game || game.status !== 'active') {
         return res.status(400).json({ message: "Game not active" });
       }
@@ -132,7 +139,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Not your turn" });
       }
       
-      // Get opponent's secret
       const opponentSecret = game.player1Id === userId ? game.player2Secret : game.player1Secret;
       if (!opponentSecret) {
         return res.status(400).json({ message: "Opponent secret not set" });
@@ -141,120 +147,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const feedback = GameEngine.calculateFeedback(guess, opponentSecret);
       const isWin = GameEngine.checkWinCondition(guess, opponentSecret);
       
-      // Get current move count
-      const existingMoves = await storage.getGameMoves(gameId);
-      const moveNumber = existingMoves.filter(m => m.playerId === userId).length + 1;
-      
-      const move = await storage.addGameMove({
-        gameId,
+      const move = gameStore.addMove(gameId, {
         playerId: userId,
         guess,
         correctDigits: feedback.correctDigits,
         correctPositions: feedback.correctPositions,
-        moveNumber,
+        moveNumber: game.moves.filter(m => m.playerId === userId).length + 1,
       });
       
-      // Update game state
-      const gameUpdates: any = {};
       if (isWin) {
-        gameUpdates.status = 'finished';
-        gameUpdates.winnerId = userId;
-        gameUpdates.finishedAt = new Date();
-        
-        // Update user stats
-        const stats = await storage.getUserStats(userId);
-        if (stats) {
-          await storage.upsertUserStats({
-            userId,
-            gamesPlayed: (stats.gamesPlayed || 0) + 1,
-            gamesWon: (stats.gamesWon || 0) + 1,
-            currentStreak: (stats.currentStreak || 0) + 1,
-            bestStreak: Math.max(stats.bestStreak || 0, (stats.currentStreak || 0) + 1),
-            totalGuesses: (stats.totalGuesses || 0) + moveNumber,
-          });
-        }
+        game.status = 'finished';
+        game.winnerId = userId;
+        game.endedAt = new Date();
       } else {
-        // Switch turns
-        gameUpdates.currentTurn = game.player1Id === userId ? game.player2Id : game.player1Id;
+        game.currentTurn = game.player1Id === userId ? game.player2Id : game.player1Id;
       }
       
-      await storage.updateGame(gameId, gameUpdates);
+      gameStore.updateGame(gameId, game);
       
-      // If it's an AI game and it's now the AI's turn, generate AI move
-      if (game.gameMode === 'ai' && !game.player2Id && !isWin) {
-        // Generate AI move after a short delay
-        setTimeout(async () => {
+      // AI move after delay
+      if (game.gameMode === 'ai' && game.player2Id === 'AI' && !isWin) {
+        setTimeout(() => {
           try {
-            const updatedGame = await storage.getGame(gameId);
+            const updatedGame = gameStore.getGame(gameId);
             if (!updatedGame || updatedGame.status !== 'active') return;
             
             const aiGuess = GameEngine.generateAIGuess('standard');
             const aiValidation = GameEngine.validateNumber(aiGuess);
             
-            if (aiValidation.isValid) {
-              const playerSecret = updatedGame.player1Secret;
-              if (playerSecret) {
-                const aiFeedback = GameEngine.calculateFeedback(aiGuess, playerSecret);
-                const aiIsWin = GameEngine.checkWinCondition(aiGuess, playerSecret);
-                
-                // Get AI move count
-                const existingMoves = await storage.getGameMoves(gameId);
-                const aiMoveNumber = existingMoves.filter(m => m.playerId === 'AI').length + 1;
-                
-                await storage.addGameMove({
-                  gameId,
-                  playerId: 'AI',
-                  guess: aiGuess,
-                  correctDigits: aiFeedback.correctDigits,
-                  correctPositions: aiFeedback.correctPositions,
-                  moveNumber: aiMoveNumber,
-                });
-                
-                const aiGameUpdates: any = {};
-                if (aiIsWin) {
-                  aiGameUpdates.status = 'finished';
-                  aiGameUpdates.winnerId = 'AI';
-                  aiGameUpdates.finishedAt = new Date();
-                } else {
-                  // Switch back to player's turn
-                  aiGameUpdates.currentTurn = updatedGame.player1Id;
-                }
-                
-                await storage.updateGame(gameId, aiGameUpdates);
+            if (aiValidation.isValid && updatedGame.player1Secret) {
+              const aiFeedback = GameEngine.calculateFeedback(aiGuess, updatedGame.player1Secret);
+              const aiWins = GameEngine.checkWinCondition(aiGuess, updatedGame.player1Secret);
+              
+              gameStore.addMove(gameId, {
+                playerId: 'AI',
+                guess: aiGuess,
+                correctDigits: aiFeedback.correctDigits,
+                correctPositions: aiFeedback.correctPositions,
+                moveNumber: updatedGame.moves.filter(m => m.playerId === 'AI').length + 1,
+              });
+              
+              if (aiWins) {
+                updatedGame.status = 'finished';
+                updatedGame.winnerId = 'AI';
+                updatedGame.endedAt = new Date();
+              } else {
+                updatedGame.currentTurn = updatedGame.player1Id;
               }
+              gameStore.updateGame(gameId, updatedGame);
             }
           } catch (error) {
-            console.error('AI move generation error:', error);
+            console.error('AI error:', error);
           }
-        }, 1500); // 1.5 second delay for realistic AI thinking time
+        }, 1500);
       }
       
       res.json({ move, feedback, isWin });
     } catch (error) {
       console.error("Error making move:", error);
       res.status(500).json({ message: "Failed to make move" });
-    }
-  });
-
-  app.get("/api/users/me/games", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const games = await storage.getUserGames(userId);
-      res.json(games);
-    } catch (error) {
-      console.error("Error fetching user games:", error);
-      res.status(500).json({ message: "Failed to fetch games" });
-    }
-  });
-
-  app.get("/api/users/me/friends", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const friends = await storage.getFriends(userId);
-      res.json(friends);
-    } catch (error) {
-      console.error("Error fetching friends:", error);
-      res.status(500).json({ message: "Failed to fetch friends" });
     }
   });
 
