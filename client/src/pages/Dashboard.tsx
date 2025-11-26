@@ -1,12 +1,21 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogOut, Play, Trophy, Zap } from 'lucide-react';
+import { LogOut, Play, Trophy, Zap, Bell } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  
+  const { data: challenges = [] } = useQuery({
+    queryKey: ['/api/challenges'],
+    refetchInterval: 2000,
+  });
+  
+  const pendingCount = challenges.filter((c: any) => c.status === 'pending').length;
 
   const handleLogout = () => {
     window.location.href = '/api/logout';
@@ -45,15 +54,29 @@ export default function Dashboard() {
             <h1 className="text-4xl font-bold text-white">NumberMind</h1>
             <p className="text-purple-200 text-sm">Welcome back, {user?.firstName || 'Player'}</p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            className="text-purple-200 hover:text-white hover:bg-purple-500/20"
-            data-testid="button-logout"
-          >
-            <LogOut className="w-5 h-5" />
-          </Button>
+          <div className="flex gap-2">
+            {pendingCount > 0 && (
+              <Button
+                onClick={() => setLocation('/challenges')}
+                className="relative bg-yellow-600 hover:bg-yellow-700 text-white gap-2"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {pendingCount}
+                </span>
+                Challenges
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="text-purple-200 hover:text-white hover:bg-purple-500/20"
+              data-testid="button-logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         {/* Player Stats Card */}
@@ -120,6 +143,14 @@ export default function Dashboard() {
           >
             <Trophy className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
             Random Opponent
+          </Button>
+
+          <Button
+            onClick={() => setLocation('/join-game')}
+            className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white h-14 rounded-lg transition-all group"
+          >
+            <Play className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+            Join Game by Code
           </Button>
         </div>
       </div>

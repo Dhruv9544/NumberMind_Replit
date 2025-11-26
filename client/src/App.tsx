@@ -10,6 +10,8 @@ import Dashboard from "@/pages/Dashboard";
 import GameSetup from "@/pages/GameSetupNew";
 import GamePlay from "@/pages/GamePlayNew";
 import GameResult from "@/pages/GameResult";
+import Challenges from "@/pages/Challenges";
+import JoinGame from "@/pages/JoinGame";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -28,6 +30,8 @@ function Router() {
       ) : (
         <>
           <Route path="/" component={Dashboard} />
+          <Route path="/challenges" component={Challenges} />
+          <Route path="/join-game" component={JoinGame} />
           <Route path="/game/setup" component={GameSetup} />
           <Route path="/game/play/:gameId" component={GamePlay} />
           <Route path="/game/result/:gameId" component={GameResult} />

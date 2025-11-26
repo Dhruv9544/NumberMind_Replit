@@ -38,10 +38,13 @@ export default function GameSetup() {
         throw new Error('Please select a friend to challenge');
       }
       
+      const friendName = gameMode === 'friend' ? mockFriends.find(f => f.id === selectedFriend)?.name : undefined;
+      
       const response = await apiRequest('POST', '/api/games', { 
         gameMode,
         difficulty: 'standard',
         friendId: gameMode === 'friend' ? selectedFriend : undefined,
+        friendName,
       });
       return response.json();
     },

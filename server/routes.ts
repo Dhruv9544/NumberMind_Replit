@@ -42,7 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/games", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { gameMode, difficulty, friendId } = req.body;
+      const { gameMode, difficulty, friendId, friendName } = req.body;
       
       let player2Id = undefined;
       
@@ -61,11 +61,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
         difficulty: difficulty || 'standard',
         status: 'waiting',
       });
+
+      // Create challenge for friend mode
+      if (gameMode === 'friend' && friendId && friendName) {
+        const challenge = gameStore.createChallenge({
+          gameId: game.id,
+          fromPlayerId: userId,
+          toPlayerId: friendId,
+          fromPlayerName: friendName,
+          status: 'pending',
+        });
+
+        // Broadcast challenge via WebSocket
+        const challengeMsg = JSON.stringify({
+          type: 'challenge_received',
+          challenge,
+          gameCode: game.code,
+        });
+        wss.clients.forEach((client: WSClient) => {
+          if ((client as any).userId === friendId && client.readyState === WebSocket.OPEN) {
+            client.send(challengeMsg);
+          }
+        });
+      }
       
       res.json(game);
     } catch (error) {
       console.error("Error creating game:", error);
       res.status(500).json({ message: "Failed to create game" });
+    }
+  });
+
+  // Get pending challenges for user
+  app.get("/api/challenges", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const challenges = gameStore.getPendingChallengesForUser(userId);
+      res.json(challenges);
+    } catch (error) {
+      console.error("Error fetching challenges:", error);
+      res.status(500).json({ message: "Failed to fetch challenges" });
+    }
+  });
+
+  // Accept challenge
+  app.post("/api/challenges/:challengeId/accept", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { challengeId } = req.params;
+      
+      const challenge = gameStore.getChallenge(challengeId);
+      if (!challenge) {
+        return res.status(404).json({ message: "Challenge not found" });
+      }
+      
+      if (challenge.toPlayerId !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+      
+      const game = gameStore.getGame(challenge.gameId);
+      if (!game) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+
+      // Set player2 as the accepting player
+      game.player2Id = userId;
+      gameStore.updateGame(game.id, game);
+      gameStore.updateChallenge(challengeId, { status: 'accepted' });
+      
+      res.json(game);
+    } catch (error) {
+      console.error("Error accepting challenge:", error);
+      res.status(500).json({ message: "Failed to accept challenge" });
+    }
+  });
+
+  // Reject challenge
+  app.post("/api/challenges/:challengeId/reject", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { challengeId } = req.params;
+      
+      const challenge = gameStore.getChallenge(challengeId);
+      if (!challenge) {
+        return res.status(404).json({ message: "Challenge not found" });
+      }
+      
+      if (challenge.toPlayerId !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      gameStore.updateChallenge(challengeId, { status: 'rejected' });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error rejecting challenge:", error);
+      res.status(500).json({ message: "Failed to reject challenge" });
+    }
+  });
+
+  // Join game by code
+  app.post("/api/games/join/:code", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { code } = req.params;
+      
+      const game = gameStore.getGameByCode(code);
+      if (!game) {
+        return res.status(404).json({ message: "Game not found. Invalid code." });
+      }
+
+      if (game.status !== 'waiting') {
+        return res.status(400).json({ message: "Game already started" });
+      }
+
+      game.player2Id = userId;
+      game.status = 'active';
+      game.startedAt = new Date();
+      game.currentTurn = game.player1Id;
+      gameStore.updateGame(game.id, game);
+      
+      res.json(game);
+    } catch (error) {
+      console.error("Error joining game:", error);
+      res.status(500).json({ message: "Failed to join game" });
     }
   });
 
