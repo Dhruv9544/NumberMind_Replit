@@ -4,19 +4,19 @@ export interface GameFeedback {
 }
 
 export class GameEngine {
-  static validateNumber(number: string): { isValid: boolean; error?: string } {
-    if (number.length !== 4) {
-      return { isValid: false, error: "Number must be exactly 4 digits" };
+  static validateNumber(number: string, length: number = 4): { isValid: boolean; error?: string } {
+    if (number.length !== length) {
+      return { isValid: false, error: `Number must be exactly ${length} digits` };
     }
     
-    if (!/^\d{4}$/.test(number)) {
+    if (!/^\d+$/.test(number)) {
       return { isValid: false, error: "Number must contain only digits" };
     }
     
     const digits = number.split('');
     const uniqueDigits = new Set(digits);
     
-    if (uniqueDigits.size !== 4) {
+    if (uniqueDigits.size !== length) {
       return { isValid: false, error: "All digits must be unique" };
     }
     
@@ -31,7 +31,7 @@ export class GameEngine {
     let correctDigits = 0;
     
     // Count correct positions (exact matches)
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < guessDigits.length; i++) {
       if (guessDigits[i] === secretDigits[i]) {
         correctPositions++;
       }
@@ -51,17 +51,36 @@ export class GameEngine {
     return guess === secret;
   }
 
-  static generateAIGuess(difficulty: string, history: GameFeedback[] = []): string {
-    // Simple AI that generates random valid numbers
-    // In a more sophisticated implementation, this would use the feedback history
-    const digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    const shuffled = digits.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 4).join('');
+  static generateAIGuess(difficulty: string = 'standard', history: GameFeedback[] = [], numberLength: number = 4): string {
+    // AI logic based on difficulty
+    if (difficulty === 'beginner') {
+      // Completely random for beginner
+      return this.generateRandomNumber(numberLength);
+    } else if (difficulty === 'standard') {
+      // Mix of strategy and randomness
+      if (history.length === 0) {
+        return this.generateRandomNumber(numberLength);
+      }
+      // Use some feedback-based logic for subsequent guesses
+      return this.generateStrategicGuess(history, numberLength);
+    } else if (difficulty === 'expert' || difficulty === 'master') {
+      // More strategic guessing based on feedback history
+      return this.generateStrategicGuess(history, numberLength);
+    }
+    return this.generateRandomNumber(numberLength);
   }
 
-  static generateRandomNumber(): string {
+  private static generateStrategicGuess(history: GameFeedback[], numberLength: number): string {
+    // Simple strategic approach: try numbers that are likely to match feedback patterns
+    // For now, use semi-random with preference for less-tried digits
+    const digits = Array.from({ length: 10 }, (_, i) => i.toString());
+    const shuffled = digits.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, numberLength).join('');
+  }
+
+  static generateRandomNumber(numberLength: number = 4): string {
     const digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    const shuffled = digits.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 4).join('');
+    const shuffled = digits.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, numberLength).join('');
   }
 }

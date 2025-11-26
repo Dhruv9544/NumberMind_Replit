@@ -86,6 +86,30 @@ export const friends = pgTable("friends", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Achievements table
+export const achievements = pgTable("achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  achievementType: varchar("achievement_type").notNull(), // code_breaker, speedster, streak_master, etc
+  achievementName: varchar("achievement_name").notNull(),
+  description: varchar("description"),
+  unlockedAt: timestamp("unlocked_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Leaderboard stats table (denormalized for performance)
+export const leaderboardStats = pgTable("leaderboard_stats", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  rank: integer("rank"),
+  gamesPlayed: integer("games_played").default(0),
+  gamesWon: integer("games_won").default(0),
+  winRate: integer("win_rate").default(0), // stored as percentage
+  currentStreak: integer("current_streak").default(0),
+  bestStreak: integer("best_streak").default(0),
+  averageGuesses: integer("average_guesses").default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   stats: one(userStats),
@@ -145,6 +169,31 @@ export const friendsRelations = relations(friends, ({ one }) => ({
   }),
 }));
 
+export const achievementsRelations = relations(achievements, ({ one }) => ({
+  user: one(users, {
+    fields: [achievements.userId],
+    references: [users.id],
+  }),
+}));
+
+export const leaderboardStatsRelations = relations(leaderboardStats, ({ one }) => ({
+  user: one(users, {
+    fields: [leaderboardStats.userId],
+    references: [users.id],
+  }),
+}));
+
+// Achievements insert schema
+export const insertAchievementSchema = createInsertSchema(achievements).omit({
+  id: true,
+  createdAt: true,
+  unlockedAt: true,
+});
+
+export const insertLeaderboardStatsSchema = createInsertSchema(leaderboardStats).omit({
+  updatedAt: true,
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -183,3 +232,7 @@ export type GameMove = typeof gameMoves.$inferSelect;
 export type InsertGameMove = z.infer<typeof insertGameMoveSchema>;
 export type Friend = typeof friends.$inferSelect;
 export type InsertFriend = z.infer<typeof insertFriendSchema>;
+export type Achievement = typeof achievements.$inferSelect;
+export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
+export type LeaderboardStats = typeof leaderboardStats.$inferSelect;
+export type InsertLeaderboardStats = z.infer<typeof insertLeaderboardStatsSchema>;

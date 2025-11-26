@@ -4,6 +4,8 @@ import {
   gameSessions,
   gameMoves,
   friends,
+  achievements,
+  leaderboardStats,
   type User,
   type UpsertUser,
   type UserStats,
@@ -14,6 +16,10 @@ import {
   type InsertGameMove,
   type Friend,
   type InsertFriend,
+  type Achievement,
+  type InsertAchievement,
+  type LeaderboardStats,
+  type InsertLeaderboardStats,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, sql } from "drizzle-orm";
@@ -44,6 +50,15 @@ export interface IStorage {
   getFriends(userId: string): Promise<User[]>;
   getFriendRequests(userId: string): Promise<User[]>;
   updateFriendStatus(friendshipId: string, status: string): Promise<Friend>;
+  
+  // Achievements operations
+  addAchievement(achievement: InsertAchievement): Promise<Achievement>;
+  getUserAchievements(userId: string): Promise<Achievement[]>;
+  
+  // Leaderboard operations
+  updateLeaderboardStats(stats: InsertLeaderboardStats): Promise<LeaderboardStats>;
+  getLeaderboard(limit?: number): Promise<(LeaderboardStats & { user: User })[]>;
+  getUserLeaderboardRank(userId: string): Promise<LeaderboardStats | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
