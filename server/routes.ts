@@ -187,6 +187,155 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Friends endpoints
+  app.get("/api/friends", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const friends = gameStore.getFriends(userId);
+      res.json(friends);
+    } catch (error) {
+      console.error("Error fetching friends:", error);
+      res.status(500).json({ message: "Failed to fetch friends" });
+    }
+  });
+
+  app.post("/api/friends/add", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { friendId, friendName, friendEmail } = req.body;
+      
+      const friend = gameStore.addFriend(userId, friendId, friendName, friendEmail);
+      res.json(friend);
+    } catch (error) {
+      console.error("Error adding friend:", error);
+      res.status(500).json({ message: "Failed to add friend" });
+    }
+  });
+
+  app.post("/api/friends/:friendId/accept", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { friendId } = req.params;
+      
+      gameStore.acceptFriend(userId, friendId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error accepting friend:", error);
+      res.status(500).json({ message: "Failed to accept friend" });
+    }
+  });
+
+  // Profile endpoints
+  app.get("/api/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let profile = gameStore.getProfile(userId);
+      
+      if (!profile) {
+        profile = gameStore.getOrCreateProfile(userId, {
+          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
+          email: req.user.claims.email,
+          avatar: req.user.claims.picture,
+        });
+      }
+      
+      res.json(profile);
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
+  app.get("/api/profile/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const profile = gameStore.getProfile(userId);
+      
+      if (!profile) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(profile);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Failed to fetch user profile" });
+    }
+  });
+
+  app.patch("/api/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { bio, avatar } = req.body;
+      
+      let profile = gameStore.getProfile(userId);
+      if (!profile) {
+        profile = gameStore.getOrCreateProfile(userId, {
+          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
+          email: req.user.claims.email,
+        });
+      }
+      
+      profile = gameStore.updateProfile(userId, { bio, avatar });
+      res.json(profile);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Leaderboard endpoints
+  app.get("/api/leaderboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit || "50"), 100);
+      const leaderboard = gameStore.getLeaderboard(limit);
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching leaderboard:", error);
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
+  // Search users
+  app.get("/api/search/users", isAuthenticated, async (req: any, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || q.length < 2) {
+        return res.json([]);
+      }
+      
+      const results = gameStore.searchUsers(q);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching users:", error);
+      res.status(500).json({ message: "Failed to search users" });
+    }
+  });
+
+  // Notifications
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notifications = gameStore.getNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.post("/api/notifications/:notificationId/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { notificationId } = req.params;
+      
+      gameStore.markNotificationRead(userId, notificationId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking notification read:", error);
+      res.status(500).json({ message: "Failed to mark notification read" });
+    }
+  });
+
   app.get("/api/games/:gameId", isAuthenticated, async (req: any, res) => {
     try {
       const { gameId } = req.params;

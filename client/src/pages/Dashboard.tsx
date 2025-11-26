@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogOut, Play, Trophy, Zap, Bell } from 'lucide-react';
+import { LogOut, Play, Trophy, Zap, Bell, BarChart3, User } from 'lucide-react';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -55,16 +55,38 @@ export default function Dashboard() {
             <p className="text-purple-200 text-sm">Welcome back, {user?.firstName || 'Player'}</p>
           </div>
           <div className="flex gap-2">
+            <Button
+              onClick={() => setLocation('/leaderboard')}
+              variant="ghost"
+              size="icon"
+              className="text-purple-200 hover:text-white hover:bg-purple-500/20"
+            >
+              <BarChart3 className="w-5 h-5" />
+            </Button>
+            <Button
+              onClick={() => setLocation('/profile')}
+              variant="ghost"
+              size="icon"
+              className="text-purple-200 hover:text-white hover:bg-purple-500/20"
+            >
+              <User className="w-5 h-5" />
+            </Button>
+            <Button
+              onClick={() => setLocation('/notifications')}
+              variant="ghost"
+              size="icon"
+              className="relative text-purple-200 hover:text-white hover:bg-purple-500/20"
+            >
+              <Bell className="w-5 h-5" />
+            </Button>
             {pendingCount > 0 && (
               <Button
                 onClick={() => setLocation('/challenges')}
                 className="relative bg-yellow-600 hover:bg-yellow-700 text-white gap-2"
               >
-                <Bell className="w-5 h-5" />
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
                   {pendingCount}
                 </span>
-                Challenges
               </Button>
             )}
             <Button

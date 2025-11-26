@@ -1,4 +1,4 @@
-// In-memory game store with challenge management
+// In-memory game store with full modern app features
 interface StoredGame {
   id: string;
   code: string;
@@ -39,15 +39,59 @@ interface StoredChallenge {
   expiresAt: Date;
 }
 
+interface StoredFriend {
+  id: string;
+  userId: string;
+  friendId: string;
+  friendName: string;
+  friendEmail: string;
+  friendAvatar?: string;
+  status: 'pending' | 'accepted' | 'blocked';
+  createdAt: Date;
+}
+
+interface StoredNotification {
+  id: string;
+  userId: string;
+  type: 'friend_request' | 'challenge' | 'game_finished' | 'achievement';
+  fromUserId?: string;
+  fromUserName?: string;
+  message: string;
+  read: boolean;
+  createdAt: Date;
+}
+
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  bio?: string;
+  stats: {
+    gamesPlayed: number;
+    gamesWon: number;
+    winRate: number;
+    currentStreak: number;
+    bestStreak: number;
+    totalGuesses: number;
+    averageGuesses: number;
+  };
+  createdAt: Date;
+  lastActive: Date;
+}
+
 class GameStore {
   private games = new Map<string, StoredGame>();
   private challenges = new Map<string, StoredChallenge>();
-  private userStats = new Map<string, any>();
+  private friends = new Map<string, StoredFriend[]>();
+  private notifications = new Map<string, StoredNotification[]>();
+  private profiles = new Map<string, UserProfile>();
 
   generateGameCode(): string {
     return Math.random().toString(36).substr(2, 8).toUpperCase();
   }
 
+  // Games
   createGame(game: Omit<StoredGame, 'id' | 'code' | 'createdAt' | 'moves'>): StoredGame {
     const id = 'game-' + Math.random().toString(36).substr(2, 9);
     const storedGame: StoredGame = {
@@ -95,6 +139,17 @@ class GameStore {
     return game?.moves || [];
   }
 
+  getAllGames(): StoredGame[] {
+    return Array.from(this.games.values());
+  }
+
+  getUserGames(userId: string): StoredGame[] {
+    return Array.from(this.games.values())
+      .filter(g => g.player1Id === userId || g.player2Id === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  // Challenges
   createChallenge(challenge: Omit<StoredChallenge, 'id' | 'createdAt' | 'expiresAt'>): StoredChallenge {
     const id = 'challenge-' + Math.random().toString(36).substr(2, 9);
     const now = new Date();
@@ -102,7 +157,7 @@ class GameStore {
       ...challenge,
       id,
       createdAt: now,
-      expiresAt: new Date(now.getTime() + 5 * 60 * 1000), // 5 minutes
+      expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
     };
     this.challenges.set(id, storedChallenge);
     return storedChallenge;
@@ -126,18 +181,146 @@ class GameStore {
     );
   }
 
-  getChallengesByGame(gameId: string): StoredChallenge[] {
-    return Array.from(this.challenges.values()).filter(c => c.gameId === gameId);
+  // Friends
+  addFriend(userId: string, friendId: string, friendName: string, friendEmail: string): StoredFriend {
+    const id = 'friend-' + Math.random().toString(36).substr(2, 9);
+    const friend: StoredFriend = {
+      id,
+      userId,
+      friendId,
+      friendName,
+      friendEmail,
+      status: 'pending',
+      createdAt: new Date(),
+    };
+    
+    if (!this.friends.has(userId)) {
+      this.friends.set(userId, []);
+    }
+    this.friends.get(userId)!.push(friend);
+    return friend;
   }
 
-  getAllGames(): StoredGame[] {
-    return Array.from(this.games.values());
+  acceptFriend(userId: string, friendId: string): void {
+    const userFriends = this.friends.get(userId) || [];
+    const friend = userFriends.find(f => f.friendId === friendId);
+    if (friend) friend.status = 'accepted';
   }
 
-  getUserGames(userId: string): StoredGame[] {
-    return Array.from(this.games.values()).filter(
-      g => g.player1Id === userId || g.player2Id === userId
-    );
+  getFriends(userId: string): StoredFriend[] {
+    return (this.friends.get(userId) || []).filter(f => f.status === 'accepted');
+  }
+
+  getPendingFriendRequests(userId: string): StoredFriend[] {
+    return (this.friends.get(userId) || []).filter(f => f.status === 'pending');
+  }
+
+  // Notifications
+  addNotification(notification: Omit<StoredNotification, 'id' | 'createdAt'>): StoredNotification {
+    const id = 'notif-' + Math.random().toString(36).substr(2, 9);
+    const stored: StoredNotification = {
+      ...notification,
+      id,
+      createdAt: new Date(),
+    };
+    
+    if (!this.notifications.has(notification.userId)) {
+      this.notifications.set(notification.userId, []);
+    }
+    this.notifications.get(notification.userId)!.push(stored);
+    return stored;
+  }
+
+  getNotifications(userId: string): StoredNotification[] {
+    return (this.notifications.get(userId) || [])
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  markNotificationRead(userId: string, notificationId: string): void {
+    const notifications = this.notifications.get(userId) || [];
+    const notif = notifications.find(n => n.id === notificationId);
+    if (notif) notif.read = true;
+  }
+
+  // Profiles
+  getOrCreateProfile(userId: string, data: { name: string; email: string; avatar?: string }): UserProfile {
+    if (this.profiles.has(userId)) {
+      return this.profiles.get(userId)!;
+    }
+
+    const profile: UserProfile = {
+      id: userId,
+      name: data.name,
+      email: data.email,
+      avatar: data.avatar,
+      bio: '',
+      stats: {
+        gamesPlayed: 0,
+        gamesWon: 0,
+        winRate: 0,
+        currentStreak: 0,
+        bestStreak: 0,
+        totalGuesses: 0,
+        averageGuesses: 0,
+      },
+      createdAt: new Date(),
+      lastActive: new Date(),
+    };
+    this.profiles.set(userId, profile);
+    return profile;
+  }
+
+  getProfile(userId: string): UserProfile | undefined {
+    return this.profiles.get(userId);
+  }
+
+  updateProfile(userId: string, updates: Partial<UserProfile>): UserProfile {
+    const profile = this.profiles.get(userId);
+    if (!profile) throw new Error('Profile not found');
+    const updated = { ...profile, ...updates };
+    this.profiles.set(userId, updated);
+    return updated;
+  }
+
+  updateStats(userId: string, gameId: string): void {
+    const profile = this.profiles.get(userId);
+    const game = this.games.get(gameId);
+    
+    if (!profile || !game) return;
+
+    profile.stats.gamesPlayed++;
+    if (game.winnerId === userId) {
+      profile.stats.gamesWon++;
+      profile.stats.currentStreak++;
+    } else {
+      profile.stats.currentStreak = 0;
+    }
+
+    profile.stats.bestStreak = Math.max(profile.stats.bestStreak, profile.stats.currentStreak);
+    profile.stats.winRate = Math.round((profile.stats.gamesWon / profile.stats.gamesPlayed) * 100);
+
+    const playerMoves = game.moves.filter(m => m.playerId === userId).length;
+    profile.stats.totalGuesses += playerMoves;
+    profile.stats.averageGuesses = Math.round(profile.stats.totalGuesses / profile.stats.gamesPlayed);
+    profile.lastActive = new Date();
+  }
+
+  getLeaderboard(limit: number = 50): UserProfile[] {
+    return Array.from(this.profiles.values())
+      .sort((a, b) => {
+        if (b.stats.gamesWon !== a.stats.gamesWon) {
+          return b.stats.gamesWon - a.stats.gamesWon;
+        }
+        return b.stats.winRate - a.stats.winRate;
+      })
+      .slice(0, limit);
+  }
+
+  searchUsers(query: string): UserProfile[] {
+    const q = query.toLowerCase();
+    return Array.from(this.profiles.values())
+      .filter(p => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+      .slice(0, 20);
   }
 
   expireOldChallenges(): void {
