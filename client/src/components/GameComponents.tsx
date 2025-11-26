@@ -219,25 +219,15 @@ export function useNumberInput(maxLength: number = 4) {
   const [digits, setDigits] = useState<string[]>(new Array(maxLength).fill(''));
   const [currentSlot, setCurrentSlot] = useState(0);
 
-  const inputDigit = (digit: number) => {
-    const digitStr = digit.toString();
-    
-    // Check if digit is already used
-    if (digits.includes(digitStr)) {
-      return false;
-    }
-
+  const inputDigit = (digit: string) => {
     if (currentSlot < maxLength) {
       const newDigits = [...digits];
-      newDigits[currentSlot] = digitStr;
+      newDigits[currentSlot] = digit;
       setDigits(newDigits);
-      
       if (currentSlot < maxLength - 1) {
         setCurrentSlot(currentSlot + 1);
       }
-      return true;
     }
-    return false;
   };
 
   const clearInput = () => {
@@ -260,7 +250,7 @@ export function useNumberInput(maxLength: number = 4) {
 
   const getValue = () => digits.join('');
   
-  const isComplete = () => digits.every(d => d !== '') && new Set(digits).size === maxLength;
+  const isComplete = () => digits.every(d => d !== '');
   
   const reset = () => {
     setDigits(new Array(maxLength).fill(''));

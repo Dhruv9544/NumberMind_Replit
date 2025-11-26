@@ -67,7 +67,7 @@ export default function GameSetup() {
     if (!isComplete()) {
       toast({
         title: 'Invalid Number',
-        description: 'Please enter a 4-digit number with unique digits',
+        description: 'Please enter a complete 4-digit number',
         variant: 'destructive',
       });
       return;
@@ -149,16 +149,14 @@ export default function GameSetup() {
               <Button
                 key={num}
                 onClick={() => inputDigit(num.toString())}
-                disabled={digits.includes(num.toString())}
-                className="h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                className="h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white transition-all hover:scale-105"
               >
                 {num}
               </Button>
             ))}
             <Button
               onClick={() => inputDigit('0')}
-              disabled={digits.includes('0')}
-              className="col-span-2 h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-30 disabled:cursor-not-allowed"
+              className="col-span-2 h-12 text-lg font-semibold bg-slate-700 hover:bg-slate-600 text-white transition-all hover:scale-105"
             >
               0
             </Button>
