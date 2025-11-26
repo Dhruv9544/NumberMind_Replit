@@ -3,17 +3,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
 
 export default function AuthPage() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (isAuthenticated && !isLoading) {
+    if (isAuthenticated) {
       setLocation('/');
     }
-  }, [isAuthenticated, isLoading, setLocation]);
+  }, [isAuthenticated, setLocation]);
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 px-4">
@@ -34,19 +33,13 @@ export default function AuthPage() {
             <CardDescription>Sign in to start playing</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
-              </div>
-            ) : (
-              <Button
-                onClick={() => (window.location.href = '/api/login')}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold h-12 rounded-lg transition-all"
-                data-testid="button-login"
-              >
-                Sign In with Replit
-              </Button>
-            )}
+            <Button
+              onClick={() => (window.location.href = '/api/login')}
+              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold h-12 rounded-lg transition-all"
+              data-testid="button-login"
+            >
+              Sign In with Replit
+            </Button>
           </CardContent>
         </Card>
 
