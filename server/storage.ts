@@ -157,20 +157,18 @@ export class DatabaseStorage implements IStorage {
 
   async initializeAIUser(): Promise<void> {
     try {
-      // Check if AI user already exists
-      const existingAI = await this.getUser('AI');
-      if (existingAI) return;
-
-      // Create AI user record
+      // Create AI user record if not exists
       await db.insert(users).values({
         id: 'AI',
         email: 'ai@numbermind.com',
         firstName: 'AI',
         lastName: 'Assistant',
         profileImageUrl: null,
-      }).onConflictDoNothing();
+      }).onConflictDoNothing().catch(() => {
+        // Silently ignore if AI user already exists
+      });
 
-      // Create AI user stats
+      // Create AI user stats if not exists
       await db.insert(userStats).values({
         userId: 'AI',
         gamesPlayed: 0,
@@ -178,11 +176,13 @@ export class DatabaseStorage implements IStorage {
         currentStreak: 0,
         bestStreak: 0,
         totalGuesses: 0,
-      }).onConflictDoNothing();
+      }).onConflictDoNothing().catch(() => {
+        // Silently ignore if AI stats already exist
+      });
 
-      console.log('AI user initialized successfully');
+      console.log('AI user initialized');
     } catch (error) {
-      console.error('Failed to initialize AI user:', error);
+      console.error('AI initialization non-critical error:', error);
     }
   }
 
