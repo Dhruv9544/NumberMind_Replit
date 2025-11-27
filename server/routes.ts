@@ -87,37 +87,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Matchmaking queue for random opponents
+  const matchmakingQueue: { oderId: string; oderofileId: string; oderofileName: string; gameId: string; timestamp: Date }[] = [];
+
   // Game routes
   app.post("/api/games", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const oderId = req.user.claims.sub;
       const { gameMode, difficulty, friendId, friendName } = req.body;
       
-      let player2Id = undefined;
+      let player2Id: string | undefined = undefined;
+      let gameStatus: 'waiting' | 'active' = 'waiting';
       
       // Handle different game modes
-      if (gameMode === 'ai' || gameMode === 'random') {
-        // AI and random opponents are treated as AI games
+      if (gameMode === 'ai') {
+        // AI opponent - starts immediately
+        player2Id = 'AI';
+        gameStatus = 'active';
+      } else if (gameMode === 'random') {
+        // Check for available player in queue
+        const availableMatch = matchmakingQueue.find(q => q.oderId !== oderId);
+        
+        if (availableMatch) {
+          // Found a match - join their game
+          const existingGame = gameStore.getGame(availableMatch.gameId);
+          if (existingGame && existingGame.status === 'waiting') {
+            existingGame.player2Id = oderId;
+            existingGame.status = 'active';
+            existingGame.startedAt = new Date();
+            existingGame.currentTurn = existingGame.player1Id;
+            gameStore.updateGame(existingGame.id, existingGame);
+            
+            // Remove from queue
+            const idx = matchmakingQueue.indexOf(availableMatch);
+            if (idx > -1) matchmakingQueue.splice(idx, 1);
+            
+            // Notify the waiting player
+            wss.clients.forEach((client: WSClient) => {
+              if ((client as any).oderId === availableMatch.oderId && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                  type: 'match_found',
+                  gameId: existingGame.id,
+                  opponentName: 'Opponent',
+                }));
+              }
+            });
+            
+            return res.json(existingGame);
+          }
+        }
+        
+        // No match found, create new game and wait
         player2Id = undefined;
+        gameStatus = 'waiting';
       } else if (gameMode === 'friend' && friendId) {
         player2Id = friendId;
+        gameStatus = 'waiting';
       }
       
       const game = gameStore.createGame({
-        player1Id: userId,
+        player1Id: oderId,
         player2Id,
         gameMode,
         difficulty: difficulty || 'standard',
-        status: 'waiting',
+        status: gameStatus,
       });
+
+      // Add to matchmaking queue for random mode
+      if (gameMode === 'random') {
+        const profile = gameStore.getProfile(oderId);
+        matchmakingQueue.push({
+          oderId: oderId,
+          oderofileId: oderId,
+          oderofileName: profile?.username || profile?.name || 'Player',
+          gameId: game.id,
+          timestamp: new Date(),
+        });
+      }
 
       // Create challenge for friend mode
       if (gameMode === 'friend' && friendId && friendName) {
+        const userName = gameStore.getProfile(oderId)?.username || req.user.claims.given_name || 'A player';
         const challenge = gameStore.createChallenge({
           gameId: game.id,
-          fromPlayerId: userId,
+          fromPlayerId: oderId,
           toPlayerId: friendId,
-          fromPlayerName: friendName,
+          fromPlayerName: userName,
           status: 'pending',
         });
 
@@ -126,9 +181,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'challenge_received',
           challenge,
           gameCode: game.code,
+          fromPlayerName: userName,
         });
         wss.clients.forEach((client: WSClient) => {
-          if ((client as any).userId === friendId && client.readyState === WebSocket.OPEN) {
+          if ((client as any).oderId === friendId && client.readyState === WebSocket.OPEN) {
             client.send(challengeMsg);
           }
         });

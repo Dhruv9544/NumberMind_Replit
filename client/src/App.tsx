@@ -12,7 +12,6 @@ import GameSetup from "@/pages/GameSetupNew";
 import GamePlay from "@/pages/GamePlayNew";
 import GameResult from "@/pages/GameResult";
 import Challenges from "@/pages/Challenges";
-import JoinGame from "@/pages/JoinGame";
 import Leaderboard from "@/pages/Leaderboard";
 import Profile from "@/pages/Profile";
 import Notifications from "@/pages/Notifications";
@@ -46,7 +45,6 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/challenges" component={Challenges} />
-      <Route path="/join-game" component={JoinGame} />
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/profile/:userId" component={Profile} />
       <Route path="/profile" component={Profile} />
