@@ -88,7 +88,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Matchmaking queue for random opponents
-  const matchmakingQueue: { oderId: string; oderofileId: string; oderofileName: string; gameId: string; timestamp: Date }[] = [];
+  const matchmakingQueue: { oderId: string; oderofileId: string; profileName: string; gameId: string; timestamp: Date }[] = [];
 
   // Game routes
   app.post("/api/games", isAuthenticated, async (req: any, res) => {
@@ -122,9 +122,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const idx = matchmakingQueue.indexOf(availableMatch);
             if (idx > -1) matchmakingQueue.splice(idx, 1);
             
-            // Notify the waiting player
+            // Notify the waiting player via WebSocket
             wss.clients.forEach((client: WSClient) => {
-              if ((client as any).oderId === availableMatch.oderId && client.readyState === WebSocket.OPEN) {
+              if ((client as any).userId === availableMatch.oderId && client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
                   type: 'match_found',
                   gameId: existingGame.id,
@@ -159,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         matchmakingQueue.push({
           oderId: oderId,
           oderofileId: oderId,
-          oderofileName: profile?.username || profile?.name || 'Player',
+          profileName: profile?.username || profile?.name || 'Player',
           gameId: game.id,
           timestamp: new Date(),
         });
@@ -184,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fromPlayerName: userName,
         });
         wss.clients.forEach((client: WSClient) => {
-          if ((client as any).oderId === friendId && client.readyState === WebSocket.OPEN) {
+          if ((client as any).userId === friendId && client.readyState === WebSocket.OPEN) {
             client.send(challengeMsg);
           }
         });
