@@ -308,6 +308,7 @@ class GameStore {
 
   getLeaderboard(limit: number = 50): UserProfile[] {
     return Array.from(this.profiles.values())
+      .filter(p => p.stats.gamesPlayed > 0)
       .sort((a, b) => {
         if (b.stats.gamesWon !== a.stats.gamesWon) {
           return b.stats.gamesWon - a.stats.gamesWon;
@@ -318,9 +319,13 @@ class GameStore {
   }
 
   searchUsers(query: string): UserProfile[] {
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().replace('@', '');
     return Array.from(this.profiles.values())
-      .filter(p => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+      .filter(p => 
+        (p.username && p.username.toLowerCase().includes(q)) ||
+        p.name.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q)
+      )
       .slice(0, 20);
   }
 
