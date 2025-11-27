@@ -530,6 +530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isWin = GameEngine.checkWinCondition(guess, opponentSecret);
       
       const move = gameStore.addMove(gameId, {
+        gameId,
         playerId: userId,
         guess,
         correctDigits: feedback.correctDigits,
@@ -541,11 +542,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         game.status = 'finished';
         game.winnerId = userId;
         game.endedAt = new Date();
+        gameStore.updateGame(gameId, game);
+        
+        // Update stats for winner
+        gameStore.updateStats(userId, gameId);
+        
+        // Update stats for opponent (if human)
+        const opponentId = game.player1Id === userId ? game.player2Id : game.player1Id;
+        if (opponentId && opponentId !== 'AI') {
+          gameStore.updateStats(opponentId, gameId);
+        }
       } else {
         game.currentTurn = game.player1Id === userId ? game.player2Id : game.player1Id;
+        gameStore.updateGame(gameId, game);
       }
-      
-      gameStore.updateGame(gameId, game);
       
       // AI move after delay
       if ((game.gameMode === 'ai' || game.gameMode === 'random') && game.player2Id === 'AI' && !isWin) {
@@ -562,6 +572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const aiWins = GameEngine.checkWinCondition(aiGuess, updatedGame.player1Secret);
               
               gameStore.addMove(gameId, {
+                gameId,
                 playerId: 'AI',
                 guess: aiGuess,
                 correctDigits: aiFeedback.correctDigits,
@@ -573,10 +584,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 updatedGame.status = 'finished';
                 updatedGame.winnerId = 'AI';
                 updatedGame.endedAt = new Date();
+                gameStore.updateGame(gameId, updatedGame);
+                
+                // Update stats for human player who lost to AI
+                gameStore.updateStats(updatedGame.player1Id, gameId);
               } else {
                 updatedGame.currentTurn = updatedGame.player1Id;
+                gameStore.updateGame(gameId, updatedGame);
               }
-              gameStore.updateGame(gameId, updatedGame);
             }
           } catch (error) {
             console.error('AI error:', error);
