@@ -115,11 +115,12 @@ export default function AuthPage() {
       } else {
         toast({
           title: 'Success',
-          description: 'Account created. Verify your email to continue.',
+          description: `Your verification token: ${responseData.verificationToken}`,
           variant: 'default',
         });
         setVerificationEmail(data.email);
         verifyForm.setValue('email', data.email);
+        verifyForm.setValue('token', responseData.verificationToken);
         setIsVerifying(true);
       }
     } catch (error) {
@@ -198,6 +199,11 @@ export default function AuthPage() {
           <CardContent className="space-y-4">
             {isVerifying ? (
               <form onSubmit={verifyForm.handleSubmit(onVerify)} className="space-y-4">
+                <div className="bg-blue-900/30 border border-blue-500/50 rounded p-3">
+                  <p className="text-sm text-blue-200">
+                    <strong>Token automatically filled!</strong> Check the notification above for your verification token. Click "Verify Email" to confirm.
+                  </p>
+                </div>
                 <div>
                   <Input
                     type="email"
