@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { storage } from "./storage";
+import { runMigrations } from "./db";
 
 const app = express();
 app.use(express.json());
@@ -37,6 +38,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run database migrations first
+  await runMigrations();
+  
   // Initialize AI user for AI game functionality
   await storage.initializeAIUser();
   

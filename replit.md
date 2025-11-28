@@ -1,113 +1,87 @@
-# Overview
+# NumberMind - Production-Ready Bulls & Cows Game
 
-NumberMind is a real-time multiplayer logic deduction game based on the classic "Bulls and Cows" concept. Players compete to guess each other's secret 4-digit number using strategic reasoning and feedback. The application is built as a full-stack web application with a React frontend and Express backend, featuring real-time gameplay through WebSocket connections and comprehensive user authentication via email/password with verification.
+## ✅ CURRENT STATUS (Nov 28, 2025)
 
-# User Preferences
+**App is RUNNING on MemStorage** (in-memory data - dev mode)
+- All authentication working (email/password, verification)
+- Forms validated with React Hook Form (onBlur mode)
+- Toast notifications (top-right)
+- AI user initialized and ready
+- DatabaseStorage fully implemented with Drizzle ORM
 
-Preferred communication style: Simple, everyday language.
+## 🔄 TO SWITCH TO POSTGRESQL
 
-# System Architecture
+**Issue:** Current DATABASE_URL credentials are invalid (password auth failed)
 
-## Frontend Architecture
-The client is built with React 18 using TypeScript and follows a modern component-based architecture. The UI leverages shadcn/ui components with Radix UI primitives for accessibility and Tailwind CSS for styling. The application uses Wouter for client-side routing and TanStack Query for server state management. The frontend is optimized for mobile-first responsive design with a focus on touch interactions.
+**Solution - Two Options:**
 
-## Backend Architecture
-The server is implemented using Express.js with TypeScript, providing RESTful API endpoints for game management and user operations. Real-time communication is handled through WebSocket connections for live gameplay features. The architecture follows a modular pattern with separate concerns for authentication, game logic, storage operations, and WebSocket handling.
+### Option 1: Fix DATABASE_URL Credentials (Recommended)
+1. Go to Replit Secrets tab
+2. Update `DATABASE_URL` to your Neon/Render connection string with **`?sslmode=require`**
+   - Example: `postgresql://user:password@host/db?sslmode=require`
+3. Verify other vars are set:
+   - `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`
+4. Edit `server/storage.ts` line 685:
+   ```typescript
+   export const storage = new DatabaseStorage();
+   ```
+5. Restart app - migrations will auto-run on startup
 
-## Authentication System
-User authentication uses email/password with verification tokens and Passport.js LocalStrategy. Passwords are hashed with bcrypt. Sessions are managed using express-session with PostgreSQL storage via connect-pg-simple. The system maintains user profiles with game statistics and email verification state.
+### Option 2: Verify Neon Credentials Are Valid
+1. Test connection with psql/pgAdmin using current DATABASE_URL
+2. If auth fails, regenerate Neon credentials in Neon dashboard
+3. Update DATABASE_URL secret
+4. Restart app
 
-## Game Engine
-The core game logic is encapsulated in a dedicated GameEngine class that handles number validation, feedback calculation, and win condition checking. The engine ensures game rules are consistently applied across all game modes (AI opponents and multiplayer).
+## 📦 ARCHITECTURE
 
-## Database Design
-The application includes both in-memory (MemStorage) and PostgreSQL (DatabaseStorage) storage implementations using identical IStorage interface for easy switching. DatabaseStorage uses Drizzle ORM with Neon serverless PostgreSQL.
+### Storage Layer (Pluggable)
+- **MemStorage**: In-memory Map-based (development/fallback)
+- **DatabaseStorage**: Full Drizzle ORM + PostgreSQL (production)
+- Same IStorage interface - just change one line to switch
 
-Schema is defined in shared/schema.ts with Drizzle ORM type definitions. Tables include: users (with passwordHash, emailVerified, emailVerificationToken), user stats, game sessions, game moves, friends, achievements, and leaderboard stats.
+### Implemented Components
+- ✅ Email/password auth with bcrypt
+- ✅ Email verification tokens
+- ✅ React Hook Form validation
+- ✅ Toast notifications
+- ✅ PostgreSQL connection pool (neon-serverless)
+- ✅ Complete schema with migrations
+- ✅ Drizzle ORM queries for all operations
 
-## Real-time Communication
-WebSocket connections enable real-time gameplay features including live move updates, turn notifications, and game state synchronization between players. The WebSocket server maintains client connections mapped to game sessions and user identities.
-
-## State Management
-Client-side state is managed through a combination of TanStack Query for server state caching and React's built-in state management for UI state. The application implements optimistic updates for better user experience while maintaining data consistency through proper error handling and cache invalidation.
-
-# Implementation Status (Nov 28, 2025)
-
-## ✅ COMPLETED
-- Email/password authentication with bcrypt hashing
-- Email verification system with tokens
-- React Hook Form validation (onBlur mode)
-- Toast notifications (top-right positioning)
-- MemStorage for development (all data in memory)
-- **NEW:** Complete DatabaseStorage class with full Drizzle ORM implementation
-- Drizzle ORM schema with all game tables
-- PostgreSQL connection pool with neon-serverless
-
-## 🔄 TO ENABLE POSTGRESQL (PRODUCTION)
-
-The DatabaseStorage class is **fully implemented** and ready to use!
-
-### Simple 2-Step Setup:
-
-**Step 1:** Edit `server/storage.ts` - Line 723
-```typescript
-// Change from:
-export const storage = new MemStorage();
-
-// To:
-export const storage = new DatabaseStorage();
+### Database Schema (Ready to deploy)
+```
+users, user_stats, game_sessions, game_moves,
+friends, achievements, leaderboard_stats, sessions
 ```
 
-**Step 2:** Run in terminal:
-```bash
-npm run db:push
-```
+## 🎮 TO TEST APP NOW
 
-Then restart the application. All user data, game stats, and leaderboards will persist in PostgreSQL!
+1. Visit the app in your browser
+2. Signup with email/password
+3. Verify email (check terminal/logs for token)
+4. Login
+5. Data persists in MemStorage during session
 
-### How DatabaseStorage Works
-The DatabaseStorage class implements the full IStorage interface with Drizzle ORM operations:
-- **User management**: Create, verify, and retrieve users with encrypted passwords
-- **Game sessions**: Create, update, and track all game states
-- **Game moves**: Store and retrieve all player guesses with feedback
-- **User statistics**: Track wins, streaks, fastest times across all games
-- **Friend system**: Manage friend requests and accepted connections
-- **Achievements**: Award and track player achievements
-- **Leaderboard**: Real-time rank tracking based on win rate and performance metrics
+## 🚀 PRODUCTION DEPLOYMENT
 
-### Verification
-After enabling PostgreSQL, you can verify by:
-1. Creating a user account
-2. Logging out and back in - data should persist in PostgreSQL
-3. Checking the database directly to see user records
-4. Playing a game - all moves and stats will be stored
+Once PostgreSQL is working:
+1. All user data automatically persists
+2. No more data loss on server restart
+3. App ready for real users
+4. Just deploy to your hosting platform
 
-# External Dependencies
+## 📝 KEY FILES
 
-## Authentication
-- **Passport.js**: Authentication middleware with LocalStrategy
-- **bcrypt**: Password hashing
-- **express-session**: Session management middleware
+- `server/storage.ts` - Storage layer (MemStorage + DatabaseStorage)
+- `server/migrations.ts` - Auto-run migrations on startup
+- `server/db.ts` - PostgreSQL connection pool
+- `shared/schema.ts` - Drizzle ORM schema
+- `client/src/pages/Auth.tsx` - Authentication UI
 
-## Database
-- **Drizzle ORM**: Type-safe database toolkit (fully implemented)
-- **neon-serverless**: PostgreSQL client for serverless environments
-- **connect-pg-simple**: PostgreSQL session store
+## 🔧 NEXT STEPS
 
-## UI Framework
-- **React 18**: Frontend framework with hooks
-- **shadcn/ui**: Component library with Radix UI
-- **Tailwind CSS**: Utility-first CSS framework
-- **Lucide React**: Icon library
-
-## Development Tools
-- **Vite**: Frontend build tool
-- **TypeScript**: Static typing
-- **Wouter**: Lightweight routing
-
-## Runtime Libraries
-- **WebSocket (ws)**: Real-time communication
-- **TanStack Query**: Server state management
-- **zod**: Schema validation
-- **nanoid**: Unique ID generation
-- **react-hook-form**: Form state management
+1. **Immediate**: Test signup/login in the running app
+2. **Fix DATABASE_URL**: Get valid PostgreSQL credentials
+3. **Enable PostgreSQL**: Edit line 685 in storage.ts
+4. **Deploy**: Use Replit's publish feature when ready
