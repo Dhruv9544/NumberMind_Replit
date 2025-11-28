@@ -21,14 +21,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
+      const user = await storage.getUser(userId);
       let profile = await gameStore.getProfile(userId);
       
-      if (!profile) {
+      if (!profile && user) {
         profile = await gameStore.getOrCreateProfile(userId, {
-          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
-          email: req.user.claims.email,
-          avatar: req.user.claims.picture,
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          email: user.email,
+          avatar: user.profileImageUrl,
         });
       }
 
@@ -36,11 +37,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({
         id: userId,
-        email: req.user.claims.email,
+        email: user?.email,
         username: username,
-        firstName: req.user.claims.given_name,
-        lastName: req.user.claims.family_name,
-        profileImageUrl: req.user.claims.picture,
+        firstName: user?.firstName,
+        lastName: user?.lastName,
+        profileImageUrl: user?.profileImageUrl,
         usernameSet: !!username && username.length > 0,
         stats: {
           gamesPlayed: profile?.stats?.gamesPlayed || 0,
@@ -59,7 +60,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Set username
   app.post('/api/auth/set-username', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { username } = req.body;
       
       if (!username || username.length < 3) {
@@ -75,9 +76,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let profile = await gameStore.getProfile(userId);
       if (!profile) {
         profile = await gameStore.getOrCreateProfile(userId, {
-          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
-          email: req.user.claims.email,
-          avatar: req.user.claims.picture,
+          name: req.user.displayName || 'Player',
+          email: req.user.email,
+          avatar: req.user.photo,
         });
       }
 
@@ -97,7 +98,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Game routes
   app.post("/api/games", isAuthenticated, async (req: any, res) => {
     try {
-      const oderId = req.user.claims.sub;
+      const oderId = req.user.id;
       const { gameMode, difficulty, friendId, friendName } = req.body;
       
       let player2Id: string | undefined = undefined;
@@ -170,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create challenge for friend mode
       if (gameMode === 'friend' && friendId && friendName) {
-        const userName = req.user.claims.given_name || 'A player';
+        const userName = req.user.displayName || 'A player';
         const challenge = gameStore.createChallenge({
           gameId: game.id,
           fromPlayerId: oderId,
@@ -203,7 +204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get pending challenges for user
   app.get("/api/challenges", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const challenges = gameStore.getPendingChallengesForUser(userId);
       res.json(challenges);
     } catch (error) {
@@ -215,7 +216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Accept challenge
   app.post("/api/challenges/:challengeId/accept", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { challengeId } = req.params;
       
       const challenge = gameStore.getChallenge(challengeId);
@@ -247,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reject challenge
   app.post("/api/challenges/:challengeId/reject", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { challengeId } = req.params;
       
       const challenge = gameStore.getChallenge(challengeId);
@@ -270,7 +271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Join game by code
   app.post("/api/games/join/:code", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { code } = req.params;
       
       const game = gameStore.getGameByCode(code);
@@ -298,7 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Friends endpoints
   app.get("/api/friends", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const friends = gameStore.getFriends(userId);
       res.json(friends);
     } catch (error) {
@@ -309,7 +310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/friends/add", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { friendId, friendName, friendEmail } = req.body;
       
       const friend = gameStore.addFriend(userId, friendId, friendName, friendEmail);
@@ -322,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/friends/:friendId/accept", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { friendId } = req.params;
       
       gameStore.acceptFriend(userId, friendId);
@@ -336,14 +337,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Profile endpoints
   app.get("/api/profile", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       let profile = await gameStore.getProfile(userId);
       
       if (!profile) {
         profile = await gameStore.getOrCreateProfile(userId, {
-          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
-          email: req.user.claims.email,
-          avatar: req.user.claims.picture,
+          name: req.user.displayName || 'Player',
+          email: req.user.email,
+          avatar: req.user.photo,
         });
       }
       
@@ -372,7 +373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/profile", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { bio, avatar } = req.body;
       
       let profile = await gameStore.getProfile(userId);
@@ -422,7 +423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notifications
   app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const notifications = gameStore.getNotifications(userId);
       res.json(notifications);
     } catch (error) {
@@ -433,7 +434,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/notifications/:notificationId/read", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { notificationId } = req.params;
       
       gameStore.markNotificationRead(userId, notificationId);
@@ -462,7 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/games/:gameId/secret", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { gameId } = req.params;
       const { secretNumber } = req.body;
       
@@ -518,7 +519,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/games/:gameId/moves", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { gameId } = req.params;
       const { guess } = req.body;
       
