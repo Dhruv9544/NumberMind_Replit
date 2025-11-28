@@ -292,11 +292,11 @@ export default function AuthPage() {
                     {...signupForm.register('email')}
                     disabled={loading}
                     className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
-                      signupForm.formState.errors.email ? 'border-red-500 border-2' : ''
+                      signupForm.formState.errors.email && signupForm.formState.touchedFields.email ? 'border-red-500 border-2' : ''
                     }`}
                     data-testid="input-signup-email"
                   />
-                  {signupForm.formState.errors.email && (
+                  {signupForm.formState.errors.email && signupForm.formState.touchedFields.email && (
                     <p className="text-red-500 text-sm mt-1">{signupForm.formState.errors.email.message}</p>
                   )}
                 </div>
@@ -307,11 +307,11 @@ export default function AuthPage() {
                     {...signupForm.register('password')}
                     disabled={loading}
                     className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
-                      signupForm.formState.errors.password ? 'border-red-500 border-2' : ''
+                      signupForm.formState.errors.password && signupForm.formState.touchedFields.password ? 'border-red-500 border-2' : ''
                     }`}
                     data-testid="input-signup-password"
                   />
-                  {signupForm.formState.errors.password && (
+                  {signupForm.formState.errors.password && signupForm.formState.touchedFields.password && (
                     <p className="text-red-500 text-sm mt-1">{signupForm.formState.errors.password.message}</p>
                   )}
                 </div>
@@ -322,11 +322,11 @@ export default function AuthPage() {
                     {...signupForm.register('confirmPassword')}
                     disabled={loading}
                     className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
-                      signupForm.formState.errors.confirmPassword ? 'border-red-500 border-2' : ''
+                      signupForm.formState.errors.confirmPassword && signupForm.formState.touchedFields.confirmPassword ? 'border-red-500 border-2' : ''
                     }`}
                     data-testid="input-confirm-password"
                   />
-                  {signupForm.formState.errors.confirmPassword && (
+                  {signupForm.formState.errors.confirmPassword && signupForm.formState.touchedFields.confirmPassword && (
                     <p className="text-red-500 text-sm mt-1">{signupForm.formState.errors.confirmPassword.message}</p>
                   )}
                 </div>
