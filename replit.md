@@ -21,7 +21,7 @@ User authentication uses email/password with verification tokens and Passport.js
 The core game logic is encapsulated in a dedicated GameEngine class that handles number validation, feedback calculation, and win condition checking. The engine ensures game rules are consistently applied across all game modes (AI opponents and multiplayer).
 
 ## Database Design
-The application includes both in-memory (MemStorage) and PostgreSQL (DatabaseStorage) storage implementations. Currently using MemStorage for development. Both implementations follow the same IStorage interface to easily switch between them.
+The application includes both in-memory (MemStorage) and PostgreSQL (DatabaseStorage) storage implementations using identical IStorage interface for easy switching. DatabaseStorage uses Drizzle ORM with Neon serverless PostgreSQL.
 
 Schema is defined in shared/schema.ts with Drizzle ORM type definitions. Tables include: users (with passwordHash, emailVerified, emailVerificationToken), user stats, game sessions, game moves, friends, achievements, and leaderboard stats.
 
@@ -39,13 +39,17 @@ Client-side state is managed through a combination of TanStack Query for server 
 - React Hook Form validation (onBlur mode)
 - Toast notifications (top-right positioning)
 - MemStorage for development (all data in memory)
-- Complete DatabaseStorage implementation for PostgreSQL
+- **NEW:** Complete DatabaseStorage class with full Drizzle ORM implementation
 - Drizzle ORM schema with all game tables
+- PostgreSQL connection pool with neon-serverless
 
-## 🔄 TO ENABLE POSTGRESQL
+## 🔄 TO ENABLE POSTGRESQL (PRODUCTION)
+
+The DatabaseStorage class is **fully implemented** and ready to use!
+
 ### Simple 2-Step Setup:
 
-**Step 1:** Edit `server/storage.ts` - Line 81
+**Step 1:** Edit `server/storage.ts` - Line 723
 ```typescript
 // Change from:
 export const storage = new MemStorage();
@@ -61,11 +65,22 @@ npm run db:push
 
 Then restart the application. All user data, game stats, and leaderboards will persist in PostgreSQL!
 
+### How DatabaseStorage Works
+The DatabaseStorage class implements the full IStorage interface with Drizzle ORM operations:
+- **User management**: Create, verify, and retrieve users with encrypted passwords
+- **Game sessions**: Create, update, and track all game states
+- **Game moves**: Store and retrieve all player guesses with feedback
+- **User statistics**: Track wins, streaks, fastest times across all games
+- **Friend system**: Manage friend requests and accepted connections
+- **Achievements**: Award and track player achievements
+- **Leaderboard**: Real-time rank tracking based on win rate and performance metrics
+
 ### Verification
 After enabling PostgreSQL, you can verify by:
 1. Creating a user account
-2. Logging out and back in - data should persist
+2. Logging out and back in - data should persist in PostgreSQL
 3. Checking the database directly to see user records
+4. Playing a game - all moves and stats will be stored
 
 # External Dependencies
 
@@ -75,7 +90,7 @@ After enabling PostgreSQL, you can verify by:
 - **express-session**: Session management middleware
 
 ## Database
-- **Drizzle ORM**: Type-safe database toolkit
+- **Drizzle ORM**: Type-safe database toolkit (fully implemented)
 - **neon-serverless**: PostgreSQL client for serverless environments
 - **connect-pg-simple**: PostgreSQL session store
 
