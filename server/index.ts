@@ -55,7 +55,11 @@ app.use((req, res, next) => {
   await runMigrations();
   
   // Initialize AI user for AI game functionality
-  await storage.initializeAIUser();
+  try {
+    await storage.initializeAIUser();
+  } catch (error) {
+    console.warn("⚠️  Could not initialize AI user:", (error as any)?.message);
+  }
   
   const server = await registerRoutes(app);
 
