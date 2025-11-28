@@ -21,8 +21,8 @@ import {
   type LeaderboardStats,
   type InsertLeaderboardStats,
 } from "@shared/schema";
-import { db } from "./db";
 import { eq, and, or, desc, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 export interface IStorage {
   // User operations
@@ -64,329 +64,289 @@ export interface IStorage {
   getUserLeaderboardRank(userId: string): Promise<LeaderboardStats | undefined>;
 }
 
-export class DatabaseStorage implements IStorage {
-  // User operations
+// MemStorage: In-memory storage for development/testing
+// NOTE: This is a TEMPORARY implementation. Switch to DatabaseStorage with proper PostgreSQL once database is provisioned.
+export class MemStorage implements IStorage {
+  private users = new Map<string, any>();
+  private userStats = new Map<string, UserStats>();
+  private gameSessions = new Map<string, GameSession>();
+  private gameMoves = new Map<string, GameMove[]>();
+  private friendships = new Map<string, Friend>();
+  private achievements = new Map<string, Achievement[]>();
+  private leaderboardStats = new Map<string, LeaderboardStats>();
+
   async getUser(id: string): Promise<User | undefined> {
-    try {
-      const [user] = await db.select().from(users).where(eq(users.id, id));
-      return user;
-    } catch (error) {
-      console.error("DB getUser failed:", error);
-      return {
-        id,
-        email: `user-${id}@game.local`,
-        firstName: "Player",
-        lastName: "",
-        profileImageUrl: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    }
+    return this.users.get(id);
   }
 
   async getUserByEmail(email: string): Promise<(User & { passwordHash?: string; emailVerificationToken?: string; emailVerified?: boolean }) | undefined> {
-    try {
-      const [user] = await db.select().from(users).where(eq(users.email, email));
-      return user;
-    } catch (error) {
-      console.error("DB getUserByEmail failed:", error);
-      return undefined;
+    for (const user of this.users.values()) {
+      if (user.email === email) {
+        return user;
+      }
     }
+    return undefined;
   }
 
   async createUserWithPassword(data: { email: string; passwordHash: string; emailVerificationToken: string }): Promise<User> {
-    try {
-      const [user] = await db
-        .insert(users)
-        .values({
-          email: data.email,
-          passwordHash: data.passwordHash,
-          emailVerificationToken: data.emailVerificationToken,
-          emailVerified: false,
-        })
-        .returning();
-      await this.upsertUserStats({ userId: user.id }).catch(() => {});
-      return user;
-    } catch (error) {
-      console.error("DB createUserWithPassword failed:", error);
-      throw error;
-    }
+    const id = nanoid();
+    const user: User & { passwordHash?: string; emailVerificationToken?: string; emailVerified?: boolean } = {
+      id,
+      email: data.email,
+      passwordHash: data.passwordHash,
+      emailVerified: false,
+      emailVerificationToken: data.emailVerificationToken,
+      firstName: "",
+      lastName: "",
+      profileImageUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.set(id, user);
+    await this.upsertUserStats({ userId: id });
+    return user;
   }
 
   async verifyUserEmail(userId: string): Promise<void> {
-    try {
-      await db.update(users).set({ emailVerified: true, emailVerificationToken: null }).where(eq(users.id, userId));
-    } catch (error) {
-      console.error("DB verifyUserEmail failed:", error);
-      throw error;
+    const user = this.users.get(userId);
+    if (user) {
+      user.emailVerified = true;
+      user.emailVerificationToken = null;
     }
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    try {
-      const [user] = await db
-        .insert(users)
-        .values(userData)
-        .onConflictDoUpdate({
-          target: users.id,
-          set: {
-            ...userData,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      
-      await this.upsertUserStats({ userId: user.id }).catch(() => {});
-      return user;
-    } catch (error) {
-      console.error("DB upsertUser failed:", error);
-      return {
-        id: "user-" + Math.random().toString(36).substr(2, 9),
-        ...userData,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    }
+    const id = userData.id || nanoid();
+    const user: User = {
+      id,
+      email: userData.email || "",
+      firstName: userData.firstName || "",
+      lastName: userData.lastName || "",
+      profileImageUrl: userData.profileImageUrl || null,
+      createdAt: userData.createdAt || new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.set(id, user);
+    return user;
   }
 
   async upsertUserWithId(id: string, userData: UpsertUser): Promise<User> {
-    try {
-      const [user] = await db
-        .insert(users)
-        .values({
-          id,
-          ...userData,
-        })
-        .onConflictDoUpdate({
-          target: users.id,
-          set: {
-            ...userData,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      
-      await this.upsertUserStats({ userId: user.id }).catch(() => {});
-      return user;
-    } catch (error) {
-      console.error("DB upsertUserWithId failed:", error);
-      return {
-        id,
-        ...userData,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    }
+    const user: User = {
+      id,
+      email: userData.email || "",
+      firstName: userData.firstName || "",
+      lastName: userData.lastName || "",
+      profileImageUrl: userData.profileImageUrl || null,
+      createdAt: userData.createdAt || new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.set(id, user);
+    return user;
   }
 
-  // User stats operations
   async getUserStats(userId: string): Promise<UserStats | undefined> {
-    try {
-      const [stats] = await db.select().from(userStats).where(eq(userStats.userId, userId));
-      return stats;
-    } catch (error) {
-      console.error("DB getUserStats failed:", error);
-      // Return default stats
-      return {
-        userId,
-        gamesPlayed: 0,
-        gamesWon: 0,
-        currentStreak: 0,
-        bestStreak: 0,
-        totalGuesses: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    }
+    return this.userStats.get(userId);
   }
 
   async upsertUserStats(stats: InsertUserStats): Promise<UserStats> {
-    try {
-      const [userStatsRecord] = await db
-        .insert(userStats)
-        .values(stats)
-        .onConflictDoUpdate({
-          target: userStats.userId,
-          set: {
-            ...stats,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      return userStatsRecord;
-    } catch (error) {
-      console.error("DB upsertUserStats failed:", error);
-      return {
-        ...stats,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    }
+    const userStats: UserStats = {
+      userId: stats.userId,
+      gamesPlayed: stats.gamesPlayed || 0,
+      gamesWon: stats.gamesWon || 0,
+      currentStreak: stats.currentStreak || 0,
+      bestStreak: stats.bestStreak || 0,
+      totalGuesses: stats.totalGuesses || 0,
+      fastestWin: stats.fastestWin,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.userStats.set(stats.userId, userStats);
+    return userStats;
   }
 
-  // Game operations
   async createGame(game: InsertGameSession): Promise<GameSession> {
-    try {
-      const [gameRecord] = await db.insert(gameSessions).values(game).returning();
-      return gameRecord;
-    } catch (error) {
-      console.error("DB createGame failed:", error);
-      // Return mock game
-      const gameId = "game-" + Math.random().toString(36).substr(2, 9);
-      return {
-        id: gameId,
-        ...game,
-        createdAt: new Date(),
-        startedAt: null,
-        endedAt: null,
-      };
-    }
+    const id = nanoid();
+    const gameSession: GameSession = {
+      id,
+      player1Id: game.player1Id,
+      player2Id: game.player2Id || null,
+      player1Secret: game.player1Secret || null,
+      player2Secret: game.player2Secret || null,
+      currentTurn: game.currentTurn || null,
+      status: game.status || "waiting",
+      winnerId: game.winnerId || null,
+      gameMode: game.gameMode,
+      difficulty: game.difficulty || "standard",
+      startedAt: game.startedAt || null,
+      finishedAt: game.finishedAt || null,
+      createdAt: new Date(),
+    };
+    this.gameSessions.set(id, gameSession);
+    return gameSession;
   }
 
   async getGame(gameId: string): Promise<GameSession | undefined> {
-    try {
-      const [game] = await db.select().from(gameSessions).where(eq(gameSessions.id, gameId));
-      return game;
-    } catch (error) {
-      console.error("DB getGame failed:", error);
-      return undefined;
-    }
+    return this.gameSessions.get(gameId);
   }
 
   async updateGame(gameId: string, updates: Partial<GameSession>): Promise<GameSession> {
-    try {
-      const [game] = await db
-        .update(gameSessions)
-        .set(updates)
-        .where(eq(gameSessions.id, gameId))
-        .returning();
-      return game;
-    } catch (error) {
-      console.error("DB updateGame failed:", error);
-      return { id: gameId } as GameSession;
+    const game = this.gameSessions.get(gameId);
+    if (game) {
+      const updated = { ...game, ...updates };
+      this.gameSessions.set(gameId, updated);
+      return updated;
     }
+    return { id: gameId } as GameSession;
   }
 
   async getUserGames(userId: string, limit = 10): Promise<GameSession[]> {
-    try {
-      return await db
-        .select()
-        .from(gameSessions)
-        .where(or(eq(gameSessions.player1Id, userId), eq(gameSessions.player2Id, userId)))
-        .orderBy(desc(gameSessions.createdAt))
-        .limit(limit);
-    } catch (error) {
-      console.error("DB getUserGames failed:", error);
-      return [];
-    }
+    const games = Array.from(this.gameSessions.values())
+      .filter(g => g.player1Id === userId || g.player2Id === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+    return games;
   }
 
-  // Game moves operations
   async addGameMove(move: InsertGameMove): Promise<GameMove> {
-    try {
-      const [moveRecord] = await db.insert(gameMoves).values(move).returning();
-      return moveRecord;
-    } catch (error) {
-      console.error("DB addGameMove failed:", error);
-      return {
-        id: "move-" + Math.random().toString(36).substr(2, 9),
-        ...move,
-        createdAt: new Date(),
-      };
+    const id = nanoid();
+    const gameMove: GameMove = {
+      id,
+      gameId: move.gameId,
+      playerId: move.playerId,
+      guess: move.guess,
+      correctDigits: move.correctDigits,
+      correctPositions: move.correctPositions,
+      moveNumber: move.moveNumber,
+      createdAt: new Date(),
+    };
+    
+    if (!this.gameMoves.has(move.gameId)) {
+      this.gameMoves.set(move.gameId, []);
     }
+    this.gameMoves.get(move.gameId)!.push(gameMove);
+    return gameMove;
   }
 
   async addAIGameMove(move: Omit<InsertGameMove, 'playerId'> & { playerId: string }): Promise<GameMove> {
-    try {
-      const [moveRecord] = await db.insert(gameMoves).values(move).returning();
-      return moveRecord;
-    } catch (error) {
-      console.error("DB addAIGameMove failed:", error);
-      return {
-        id: "move-" + Math.random().toString(36).substr(2, 9),
-        ...move,
-        createdAt: new Date(),
-      };
+    return this.addGameMove(move);
+  }
+
+  async getGameMoves(gameId: string): Promise<GameMove[]> {
+    return this.gameMoves.get(gameId) || [];
+  }
+
+  async addFriend(friendship: InsertFriend): Promise<Friend> {
+    const id = nanoid();
+    const friend: Friend = {
+      id,
+      userId: friendship.userId,
+      friendId: friendship.friendId,
+      status: friendship.status || "pending",
+      createdAt: new Date(),
+    };
+    this.friendships.set(id, friend);
+    return friend;
+  }
+
+  async getFriends(userId: string): Promise<User[]> {
+    const friendIds = Array.from(this.friendships.values())
+      .filter(f => f.userId === userId && f.status === "accepted")
+      .map(f => f.friendId);
+    
+    return friendIds
+      .map(id => this.users.get(id))
+      .filter((u): u is User => !!u);
+  }
+
+  async getFriendRequests(userId: string): Promise<User[]> {
+    const requesterIds = Array.from(this.friendships.values())
+      .filter(f => f.friendId === userId && f.status === "pending")
+      .map(f => f.userId);
+    
+    return requesterIds
+      .map(id => this.users.get(id))
+      .filter((u): u is User => !!u);
+  }
+
+  async updateFriendStatus(friendshipId: string, status: string): Promise<Friend> {
+    const friendship = this.friendships.get(friendshipId);
+    if (friendship) {
+      friendship.status = status;
     }
+    return friendship!;
+  }
+
+  async addAchievement(achievement: InsertAchievement): Promise<Achievement> {
+    const id = nanoid();
+    const ach: Achievement = {
+      id,
+      userId: achievement.userId,
+      achievementType: achievement.achievementType,
+      achievementName: achievement.achievementName,
+      description: achievement.description,
+      unlockedAt: new Date(),
+      createdAt: new Date(),
+    };
+    
+    if (!this.achievements.has(achievement.userId)) {
+      this.achievements.set(achievement.userId, []);
+    }
+    this.achievements.get(achievement.userId)!.push(ach);
+    return ach;
+  }
+
+  async getUserAchievements(userId: string): Promise<Achievement[]> {
+    return this.achievements.get(userId) || [];
+  }
+
+  async updateLeaderboardStats(stats: InsertLeaderboardStats): Promise<LeaderboardStats> {
+    const leaderboard: LeaderboardStats = {
+      userId: stats.userId,
+      rank: stats.rank,
+      gamesPlayed: stats.gamesPlayed || 0,
+      gamesWon: stats.gamesWon || 0,
+      winRate: stats.winRate || 0,
+      currentStreak: stats.currentStreak || 0,
+      bestStreak: stats.bestStreak || 0,
+      averageGuesses: stats.averageGuesses || 0,
+      updatedAt: new Date(),
+    };
+    this.leaderboardStats.set(stats.userId, leaderboard);
+    return leaderboard;
+  }
+
+  async getLeaderboard(limit = 100): Promise<(LeaderboardStats & { user: User })[]> {
+    const stats = Array.from(this.leaderboardStats.values())
+      .sort((a, b) => (b.rank || 999999) - (a.rank || 999999))
+      .slice(0, limit);
+    
+    return stats
+      .map(stat => ({
+        ...stat,
+        user: this.users.get(stat.userId)!,
+      }))
+      .filter(item => item.user);
+  }
+
+  async getUserLeaderboardRank(userId: string): Promise<LeaderboardStats | undefined> {
+    return this.leaderboardStats.get(userId);
   }
 
   async initializeAIUser(): Promise<void> {
-    try {
-      // Create AI user record if not exists
-      await db.insert(users).values({
+    if (!this.users.has('AI')) {
+      this.users.set('AI', {
         id: 'AI',
         email: 'ai@numbermind.com',
         firstName: 'AI',
         lastName: 'Assistant',
         profileImageUrl: null,
-      }).onConflictDoNothing().catch(() => {
-        // Silently ignore if AI user already exists
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
-
-      // Create AI user stats if not exists
-      await db.insert(userStats).values({
-        userId: 'AI',
-        gamesPlayed: 0,
-        gamesWon: 0,
-        currentStreak: 0,
-        bestStreak: 0,
-        totalGuesses: 0,
-      }).onConflictDoNothing().catch(() => {
-        // Silently ignore if AI stats already exist
-      });
-
-      console.log('AI user initialized');
-    } catch (error) {
-      console.error('AI initialization non-critical error:', error);
+      await this.upsertUserStats({ userId: 'AI' });
     }
-  }
-
-  async getGameMoves(gameId: string): Promise<GameMove[]> {
-    return await db
-      .select()
-      .from(gameMoves)
-      .where(eq(gameMoves.gameId, gameId))
-      .orderBy(gameMoves.moveNumber);
-  }
-
-  // Friends operations
-  async addFriend(friendship: InsertFriend): Promise<Friend> {
-    const [friend] = await db.insert(friends).values(friendship).returning();
-    return friend;
-  }
-
-  async getFriends(userId: string): Promise<User[]> {
-    const friendships = await db
-      .select({
-        friend: users,
-      })
-      .from(friends)
-      .innerJoin(users, eq(friends.friendId, users.id))
-      .where(and(eq(friends.userId, userId), eq(friends.status, "accepted")));
-    
-    return friendships.map(f => f.friend);
-  }
-
-  async getFriendRequests(userId: string): Promise<User[]> {
-    const requests = await db
-      .select({
-        user: users,
-      })
-      .from(friends)
-      .innerJoin(users, eq(friends.userId, users.id))
-      .where(and(eq(friends.friendId, userId), eq(friends.status, "pending")));
-    
-    return requests.map(r => r.user);
-  }
-
-  async updateFriendStatus(friendshipId: string, status: string): Promise<Friend> {
-    const [friendship] = await db
-      .update(friends)
-      .set({ status })
-      .where(eq(friends.id, friendshipId))
-      .returning();
-    return friendship;
+    console.log('AI user initialized');
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MemStorage();

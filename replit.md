@@ -1,6 +1,6 @@
 # Overview
 
-NumberMind is a real-time multiplayer logic deduction game based on the classic "Bulls and Cows" concept. Players compete to guess each other's secret 4-digit number using strategic reasoning and feedback. The application is built as a full-stack web application with a React frontend and Express backend, featuring real-time gameplay through WebSocket connections and comprehensive user authentication via Replit Auth.
+NumberMind is a real-time multiplayer logic deduction game based on the classic "Bulls and Cows" concept. Players compete to guess each other's secret 4-digit number using strategic reasoning and feedback. The application is built as a full-stack web application with a React frontend and Express backend, featuring real-time gameplay through WebSocket connections and comprehensive user authentication via email/password with verification.
 
 # User Preferences
 
@@ -15,13 +15,15 @@ The client is built with React 18 using TypeScript and follows a modern componen
 The server is implemented using Express.js with TypeScript, providing RESTful API endpoints for game management and user operations. Real-time communication is handled through WebSocket connections for live gameplay features. The architecture follows a modular pattern with separate concerns for authentication, game logic, storage operations, and WebSocket handling.
 
 ## Authentication System
-User authentication is implemented using Replit's OpenID Connect (OIDC) system with Passport.js. Sessions are managed using express-session with PostgreSQL storage via connect-pg-simple. The system supports automatic user provisioning and maintains user profiles with game statistics.
+User authentication uses email/password with verification tokens and Passport.js LocalStrategy. Passwords are hashed with bcrypt. Sessions are managed using express-session with PostgreSQL storage via connect-pg-simple. The system maintains user profiles with game statistics and email verification state.
 
 ## Game Engine
 The core game logic is encapsulated in a dedicated GameEngine class that handles number validation, feedback calculation, and win condition checking. The engine ensures game rules are consistently applied across all game modes (AI opponents and multiplayer).
 
 ## Database Design
-The application uses PostgreSQL with Drizzle ORM for type-safe database operations. The schema includes tables for users, user statistics, game sessions, game moves, friends, and session storage. Database migrations are managed through Drizzle Kit with schema definitions in TypeScript.
+TEMPORARY: Currently using in-memory storage (MemStorage) for development/testing. This needs to be switched to DatabaseStorage with PostgreSQL once proper database credentials are provisioned.
+
+The schema is defined in shared/schema.ts with Drizzle ORM type definitions. Tables include: users (with passwordHash, emailVerified, emailVerificationToken), user stats, game sessions, game moves, friends, achievements, and leaderboard stats.
 
 ## Real-time Communication
 WebSocket connections enable real-time gameplay features including live move updates, turn notifications, and game state synchronization between players. The WebSocket server maintains client connections mapped to game sessions and user identities.
@@ -29,16 +31,19 @@ WebSocket connections enable real-time gameplay features including live move upd
 ## State Management
 Client-side state is managed through a combination of TanStack Query for server state caching and React's built-in state management for UI state. The application implements optimistic updates for better user experience while maintaining data consistency through proper error handling and cache invalidation.
 
+# Recent Changes (Nov 28, 2025)
+
+- Fixed signup form validation to check touched fields before showing errors (onBlur mode)
+- Moved toast notifications to top-right corner for better visibility
+- Migrated authentication from Replit Auth to email/password with bcrypt hashing
+- Switched to in-memory storage (MemStorage) temporarily due to database credential issues
+- **ACTION NEEDED**: Update DATABASE_URL secret with valid PostgreSQL credentials and switch server/storage.ts to use DatabaseStorage instead of MemStorage
+
 # External Dependencies
 
-## Database
-- **Neon PostgreSQL**: Serverless PostgreSQL database hosting
-- **Drizzle ORM**: Type-safe database toolkit with schema management
-- **connect-pg-simple**: PostgreSQL session store for Express sessions
-
 ## Authentication
-- **Replit Auth**: OpenID Connect authentication provider
-- **Passport.js**: Authentication middleware with OpenID Connect strategy
+- **Passport.js**: Authentication middleware with LocalStrategy
+- **bcrypt**: Password hashing
 - **express-session**: Session management middleware
 
 ## UI Framework
@@ -60,3 +65,4 @@ Client-side state is managed through a combination of TanStack Query for server 
 - **date-fns**: Date manipulation utilities
 - **zod**: Schema validation library
 - **nanoid**: Unique ID generation
+- **react-hook-form**: Form state management
