@@ -64,8 +64,8 @@ export interface IStorage {
   getUserLeaderboardRank(userId: string): Promise<LeaderboardStats | undefined>;
 }
 
-// MemStorage: In-memory storage for development/testing
-// NOTE: This is a TEMPORARY implementation. Switch to DatabaseStorage with proper PostgreSQL once database is provisioned.
+// In-Memory Storage - Development Implementation
+// For PostgreSQL: Switch to DatabaseStorage and run: npm run db:push
 export class MemStorage implements IStorage {
   private users = new Map<string, any>();
   private userStats = new Map<string, UserStats>();
@@ -149,7 +149,7 @@ export class MemStorage implements IStorage {
   }
 
   async upsertUserStats(stats: InsertUserStats): Promise<UserStats> {
-    const userStats: UserStats = {
+    const userStatsRecord: UserStats = {
       userId: stats.userId,
       gamesPlayed: stats.gamesPlayed || 0,
       gamesWon: stats.gamesWon || 0,
@@ -160,8 +160,8 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    this.userStats.set(stats.userId, userStats);
-    return userStats;
+    this.userStats.set(stats.userId, userStatsRecord);
+    return userStatsRecord;
   }
 
   async createGame(game: InsertGameSession): Promise<GameSession> {
