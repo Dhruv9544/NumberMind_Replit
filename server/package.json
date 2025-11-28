@@ -16,7 +16,8 @@
     "drizzle-orm": "^0.39.1",
     "pg": "^8.10.0",
     "express-session": "^1.18.2",
-    "connect-pg-simple": "^10.0.0"
+    "connect-pg-simple": "^10.0.0",
+    "esbuild": "^0.19.0"
   },
   "devDependencies": {
     "esbuild": "^0.19.0",
