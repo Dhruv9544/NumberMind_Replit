@@ -3,10 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
-import Auth from "@/pages/Auth";
-import SetupUsername from "@/pages/SetupUsername";
 import Dashboard from "@/pages/Dashboard";
 import GameSetup from "@/pages/GameSetupNew";
 import GamePlay from "@/pages/GamePlayNew";
@@ -17,30 +14,6 @@ import Profile from "@/pages/Profile";
 import Notifications from "@/pages/Notifications";
 
 function Router() {
-  const { isAuthenticated, isLoading, user } = useAuth();
-
-  if (isLoading) {
-    return <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900" />;
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <Switch>
-        <Route path="/" component={Auth} />
-        <Route component={Auth} />
-      </Switch>
-    );
-  }
-
-  if (isAuthenticated && !user?.usernameSet) {
-    return (
-      <Switch>
-        <Route path="/" component={SetupUsername} />
-        <Route component={SetupUsername} />
-      </Switch>
-    );
-  }
-
   return (
     <Switch>
       <Route path="/" component={Dashboard} />

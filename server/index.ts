@@ -3,9 +3,22 @@ import { registerRoutes } from "./routes";
 import { storage } from "./storage";
 import { runMigrations } from "./db";
 
+// Simple guest session middleware - generates temporary userId for each session
+const generateGuestSession = (req: any, _res: any, next: any) => {
+  if (!req.user) {
+    req.user = {
+      id: `guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      email: `guest-${Date.now()}@numbermind.local`,
+      username: `Guest`,
+    };
+  }
+  next();
+};
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(generateGuestSession);
 
 app.use((req, res, next) => {
   const start = Date.now();
