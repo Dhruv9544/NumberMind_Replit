@@ -70,14 +70,9 @@ export interface IStorage {
  * PRODUCTION MIGRATION GUIDE:
  * To use PostgreSQL database:
  * 1. Go to Replit Secrets tab and verify DATABASE_URL has correct credentials
- * 2. Comment out: export const storage = new MemStorage();
- * 3. Uncomment: // PRODUCTION: Switch to DatabaseStorage once DATABASE_URL credentials are valid
-// export const storage = new DatabaseStorage();
-
-// DEVELOPMENT: Using MemStorage - switch to above line once DB is ready
-export const storage = new MemStorage();
- * 4. Run: npm run db:push
- * 5. Restart workflow
+ * 2. Edit line at end of file: change "new MemStorage()" to "new DatabaseStorage()"
+ * 3. Run: npm run db:push
+ * 4. Restart workflow
  * 
  * All data (users, stats, games, etc) will persist in PostgreSQL
  */
@@ -364,8 +359,5 @@ export class MemStorage implements IStorage {
   }
 }
 
-// PRODUCTION: Switch to DatabaseStorage once DATABASE_URL credentials are valid
-// export const storage = new DatabaseStorage();
-
-// DEVELOPMENT: Using MemStorage - switch to above line once DB is ready
+// Using MemStorage for now - DatabaseStorage class needs to be implemented
 export const storage = new MemStorage();

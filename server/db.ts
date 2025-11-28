@@ -11,5 +11,10 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+console.log("DATABASE_URL set:", process.env.DATABASE_URL.substring(0, 50) + "...");
+console.log("Initializing PostgreSQL connection pool...");
+
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle({ client: pool, schema });
+
+console.log("✅ PostgreSQL connection pool created successfully");
