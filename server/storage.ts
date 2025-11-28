@@ -677,6 +677,5 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Using MemStorage fallback - Neon credentials are invalid
-// To enable PostgreSQL: Get valid DATABASE_URL from Neon and change below to: new DatabaseStorage()
-export const storage = new MemStorage();
+// PostgreSQL with Neon - all user data persists permanently
+export const storage = new DatabaseStorage();
