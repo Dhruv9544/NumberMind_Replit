@@ -1,10 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { useState } from 'react';
+
+const loginSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+const signupSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+const verifySchema = z.object({
+  email: z.string().email('Invalid email address'),
+  token: z.string().min(5, 'Verification token is required'),
+});
+
+type LoginForm = z.infer<typeof loginSchema>;
+type SignupForm = z.infer<typeof signupSchema>;
+type VerifyForm = z.infer<typeof verifySchema>;
 
 export default function AuthPage() {
   const { isAuthenticated } = useAuth();
@@ -12,11 +39,23 @@ export default function AuthPage() {
   const { toast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [isVerifying, setIsVerifying] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [verificationToken, setVerificationToken] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
+
+  const loginForm = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onBlur',
+  });
+
+  const signupForm = useForm<SignupForm>({
+    resolver: zodResolver(signupSchema),
+    mode: 'onBlur',
+  });
+
+  const verifyForm = useForm<VerifyForm>({
+    resolver: zodResolver(verifySchema),
+    mode: 'onBlur',
+  });
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -24,78 +63,107 @@ export default function AuthPage() {
     }
   }, [isAuthenticated, setLocation]);
 
-  const handleLogin = async (e: any) => {
-    e.preventDefault();
+  const onLogin = async (data: LoginForm) => {
     setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(data),
       });
-      const data = await res.json();
+      const responseData = await res.json();
       if (!res.ok) {
-        toast({ title: 'Error', description: data.message, variant: 'destructive' });
+        toast({
+          title: 'Login Failed',
+          description: responseData.message || 'Invalid credentials',
+          variant: 'destructive',
+        });
       } else {
-        toast({ title: 'Success', description: 'Logged in successfully' });
+        toast({
+          title: 'Success',
+          description: 'Logged in successfully',
+          variant: 'default',
+        });
         setLocation('/');
       }
     } catch (error) {
-      toast({ title: 'Error', description: 'Login failed', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Login failed. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSignup = async (e: any) => {
-    e.preventDefault();
-    if (password !== confirmPassword) {
-      toast({ title: 'Error', description: 'Passwords do not match', variant: 'destructive' });
-      return;
-    }
+  const onSignup = async (data: SignupForm) => {
     setLoading(true);
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, confirmPassword }),
+        body: JSON.stringify(data),
       });
-      const data = await res.json();
+      const responseData = await res.json();
       if (!res.ok) {
-        toast({ title: 'Error', description: data.message, variant: 'destructive' });
+        toast({
+          title: 'Signup Failed',
+          description: responseData.message || 'Signup failed',
+          variant: 'destructive',
+        });
       } else {
-        toast({ title: 'Success', description: 'Signup successful. Check your verification token.' });
-        setVerificationToken(data.verificationToken);
+        toast({
+          title: 'Success',
+          description: 'Account created. Verify your email to continue.',
+          variant: 'default',
+        });
+        setVerificationEmail(data.email);
+        verifyForm.setValue('email', data.email);
         setIsVerifying(true);
       }
     } catch (error) {
-      toast({ title: 'Error', description: 'Signup failed', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Signup failed. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = async (e: any) => {
-    e.preventDefault();
+  const onVerify = async (data: VerifyForm) => {
     setLoading(true);
     try {
       const res = await fetch('/api/auth/verify-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, token: verificationToken }),
+        body: JSON.stringify({ email: data.email, token: data.token }),
       });
-      const data = await res.json();
+      const responseData = await res.json();
       if (!res.ok) {
-        toast({ title: 'Error', description: data.message, variant: 'destructive' });
+        toast({
+          title: 'Verification Failed',
+          description: responseData.message || 'Invalid verification token',
+          variant: 'destructive',
+        });
       } else {
-        toast({ title: 'Success', description: 'Email verified. You can now login.' });
+        toast({
+          title: 'Success',
+          description: 'Email verified! You can now login.',
+          variant: 'default',
+        });
         setIsVerifying(false);
         setIsLogin(true);
-        setPassword('');
-        setConfirmPassword('');
+        loginForm.reset();
       }
     } catch (error) {
-      toast({ title: 'Error', description: 'Verification failed', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Verification failed. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -116,28 +184,46 @@ export default function AuthPage() {
 
         <Card className="border-purple-500/20 bg-slate-900/50 backdrop-blur">
           <CardHeader className="text-center">
-            <CardTitle className="text-white">{isVerifying ? 'Verify Email' : (isLogin ? 'Login' : 'Sign Up')}</CardTitle>
-            <CardDescription>{isVerifying ? 'Enter your verification token' : (isLogin ? 'Enter your credentials' : 'Create your account')}</CardDescription>
+            <CardTitle className="text-white">
+              {isVerifying ? 'Verify Email' : isLogin ? 'Login' : 'Sign Up'}
+            </CardTitle>
+            <CardDescription>
+              {isVerifying
+                ? 'Enter your verification token'
+                : isLogin
+                ? 'Welcome back'
+                : 'Create your account'}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {isVerifying ? (
-              <form onSubmit={handleVerify} className="space-y-4">
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
-                  disabled={loading}
-                />
-                <Input
-                  type="text"
-                  placeholder="Verification Token"
-                  value={verificationToken}
-                  onChange={(e) => setVerificationToken(e.target.value)}
-                  className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
-                  disabled={loading}
-                />
+              <form onSubmit={verifyForm.handleSubmit(onVerify)} className="space-y-4">
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Email"
+                    {...verifyForm.register('email')}
+                    disabled={loading}
+                    onBlur={verifyForm.handleBlur}
+                    className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
+                  />
+                  {verifyForm.formState.errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{verifyForm.formState.errors.email.message}</p>
+                  )}
+                </div>
+                <div>
+                  <Input
+                    type="text"
+                    placeholder="Verification Token"
+                    {...verifyForm.register('token')}
+                    disabled={loading}
+                    onBlur={verifyForm.handleBlur}
+                    className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
+                  />
+                  {verifyForm.formState.errors.token && (
+                    <p className="text-red-500 text-sm mt-1">{verifyForm.formState.errors.token.message}</p>
+                  )}
+                </div>
                 <Button
                   type="submit"
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold h-12"
@@ -148,23 +234,37 @@ export default function AuthPage() {
                 </Button>
               </form>
             ) : isLogin ? (
-              <form onSubmit={handleLogin} className="space-y-4">
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
-                  disabled={loading}
-                />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
-                  disabled={loading}
-                />
+              <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Email"
+                    {...loginForm.register('email')}
+                    disabled={loading}
+                    className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
+                      loginForm.formState.errors.email ? 'border-red-500 border-2' : ''
+                    }`}
+                    data-testid="input-email"
+                  />
+                  {loginForm.formState.errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{loginForm.formState.errors.email.message}</p>
+                  )}
+                </div>
+                <div>
+                  <Input
+                    type="password"
+                    placeholder="Password"
+                    {...loginForm.register('password')}
+                    disabled={loading}
+                    className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
+                      loginForm.formState.errors.password ? 'border-red-500 border-2' : ''
+                    }`}
+                    data-testid="input-password"
+                  />
+                  {loginForm.formState.errors.password && (
+                    <p className="text-red-500 text-sm mt-1">{loginForm.formState.errors.password.message}</p>
+                  )}
+                </div>
                 <Button
                   type="submit"
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold h-12"
@@ -184,31 +284,52 @@ export default function AuthPage() {
                 </Button>
               </form>
             ) : (
-              <form onSubmit={handleSignup} className="space-y-4">
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
-                  disabled={loading}
-                />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
-                  disabled={loading}
-                />
-                <Input
-                  type="password"
-                  placeholder="Confirm Password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
-                  disabled={loading}
-                />
+              <form onSubmit={signupForm.handleSubmit(onSignup)} className="space-y-4">
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Email"
+                    {...signupForm.register('email')}
+                    disabled={loading}
+                    className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
+                      signupForm.formState.errors.email ? 'border-red-500 border-2' : ''
+                    }`}
+                    data-testid="input-signup-email"
+                  />
+                  {signupForm.formState.errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{signupForm.formState.errors.email.message}</p>
+                  )}
+                </div>
+                <div>
+                  <Input
+                    type="password"
+                    placeholder="Password"
+                    {...signupForm.register('password')}
+                    disabled={loading}
+                    className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
+                      signupForm.formState.errors.password ? 'border-red-500 border-2' : ''
+                    }`}
+                    data-testid="input-signup-password"
+                  />
+                  {signupForm.formState.errors.password && (
+                    <p className="text-red-500 text-sm mt-1">{signupForm.formState.errors.password.message}</p>
+                  )}
+                </div>
+                <div>
+                  <Input
+                    type="password"
+                    placeholder="Confirm Password"
+                    {...signupForm.register('confirmPassword')}
+                    disabled={loading}
+                    className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
+                      signupForm.formState.errors.confirmPassword ? 'border-red-500 border-2' : ''
+                    }`}
+                    data-testid="input-confirm-password"
+                  />
+                  {signupForm.formState.errors.confirmPassword && (
+                    <p className="text-red-500 text-sm mt-1">{signupForm.formState.errors.confirmPassword.message}</p>
+                  )}
+                </div>
                 <Button
                   type="submit"
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold h-12"
