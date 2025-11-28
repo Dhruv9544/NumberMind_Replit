@@ -1,13 +1,10 @@
 import passport from "passport";
-import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { Strategy as LocalStrategy } from "passport-local";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import MemoryStore from "memorystore";
+import bcrypt from "bcrypt";
 import { storage } from "./storage";
-
-if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-  throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set");
-}
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -28,20 +25,6 @@ export function getSession() {
   });
 }
 
-async function upsertUser(profile: any) {
-  const userId = profile.id;
-  try {
-    await storage.upsertUserWithId(userId, {
-      email: profile.emails?.[0]?.value || "",
-      firstName: profile.name?.givenName || "",
-      lastName: profile.name?.familyName || "",
-      profileImageUrl: profile.photos?.[0]?.value || "",
-    });
-  } catch (error) {
-    console.error("Failed to upsert user:", error);
-  }
-}
-
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
@@ -49,24 +32,34 @@ export async function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new GoogleStrategy(
+    new LocalStrategy(
       {
-        clientID: process.env.GOOGLE_CLIENT_ID!,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        callbackURL: "/api/callback",
+        usernameField: "email",
+        passwordField: "password",
       },
-      async (accessToken: any, refreshToken: any, profile: any, done: any) => {
+      async (email: string, password: string, done: any) => {
         try {
-          await upsertUser(profile);
-          const user = {
-            id: profile.id,
-            email: profile.emails?.[0]?.value,
-            displayName: profile.displayName,
-            photo: profile.photos?.[0]?.value,
-          };
+          const user = await storage.getUserByEmail(email);
+          if (!user) {
+            return done(null, false, { message: "User not found" });
+          }
+
+          if (!user.passwordHash) {
+            return done(null, false, { message: "Invalid credentials" });
+          }
+
+          const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+          if (!isPasswordValid) {
+            return done(null, false, { message: "Invalid credentials" });
+          }
+
+          if (!user.emailVerified) {
+            return done(null, false, { message: "Email not verified" });
+          }
+
           return done(null, user);
         } catch (error) {
-          return done(error, undefined);
+          return done(error);
         }
       }
     )
@@ -80,7 +73,7 @@ export async function setupAuth(app: Express) {
     try {
       const user = await storage.getUser(id);
       if (user) {
-        done(null, { id, email: user.email, displayName: user.firstName });
+        done(null, user);
       } else {
         done(null, null);
       }
@@ -89,25 +82,98 @@ export async function setupAuth(app: Express) {
     }
   });
 
-  app.get(
-    "/api/login",
-    passport.authenticate("google", { scope: ["profile", "email"] })
-  );
+  // Sign up endpoint
+  app.post("/api/auth/signup", async (req: any, res) => {
+    try {
+      const { email, password, confirmPassword } = req.body;
 
-  app.get(
-    "/api/callback",
-    passport.authenticate("google", { failureRedirect: "/" }),
-    (req, res) => {
-      res.redirect("/");
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password required" });
+      }
+
+      if (password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords do not match" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      const verificationToken = Math.random().toString(36).substr(2, 9);
+
+      const user = await storage.createUserWithPassword({
+        email,
+        passwordHash,
+        emailVerificationToken: verificationToken,
+      });
+
+      res.json({
+        success: true,
+        message: "Signup successful. Please verify your email.",
+        verificationToken,
+      });
+    } catch (error) {
+      console.error("Signup error:", error);
+      res.status(500).json({ message: "Signup failed" });
     }
-  );
+  });
+
+  // Verify email endpoint
+  app.post("/api/auth/verify-email", async (req: any, res) => {
+    try {
+      const { email, token } = req.body;
+
+      if (!email || !token) {
+        return res.status(400).json({ message: "Email and token required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(400).json({ message: "User not found" });
+      }
+
+      if (user.emailVerificationToken !== token) {
+        return res.status(400).json({ message: "Invalid verification token" });
+      }
+
+      await storage.verifyUserEmail(user.id);
+      res.json({ success: true, message: "Email verified successfully" });
+    } catch (error) {
+      console.error("Verify email error:", error);
+      res.status(500).json({ message: "Email verification failed" });
+    }
+  });
+
+  // Login endpoint
+  app.post("/api/auth/login", (req: any, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) {
+        return res.status(500).json({ message: "Authentication error" });
+      }
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
+      }
+      req.logIn(user, (err: any) => {
+        if (err) {
+          return res.status(500).json({ message: "Login failed" });
+        }
+        res.json({ success: true, message: "Login successful" });
+      });
+    })(req, res, next);
+  });
 
   app.get("/api/logout", (req, res) => {
     req.logout((err) => {
       if (err) {
         return res.status(500).json({ message: "Logout failed" });
       }
-      res.redirect("/");
+      res.json({ success: true, message: "Logged out" });
     });
   });
 }

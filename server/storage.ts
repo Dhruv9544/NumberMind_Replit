@@ -25,10 +25,13 @@ import { db } from "./db";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
-  // User operations (mandatory for Replit Auth)
+  // User operations
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<(User & { passwordHash?: string; emailVerificationToken?: string; emailVerified?: boolean }) | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   upsertUserWithId(id: string, user: UpsertUser): Promise<User>;
+  createUserWithPassword(data: { email: string; passwordHash: string; emailVerificationToken: string }): Promise<User>;
+  verifyUserEmail(userId: string): Promise<void>;
   initializeAIUser(): Promise<void>;
   
   // User stats operations
@@ -69,7 +72,6 @@ export class DatabaseStorage implements IStorage {
       return user;
     } catch (error) {
       console.error("DB getUser failed:", error);
-      // Return mock user to allow game to proceed
       return {
         id,
         email: `user-${id}@game.local`,
@@ -79,6 +81,44 @@ export class DatabaseStorage implements IStorage {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+    }
+  }
+
+  async getUserByEmail(email: string): Promise<(User & { passwordHash?: string; emailVerificationToken?: string; emailVerified?: boolean }) | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, email));
+      return user;
+    } catch (error) {
+      console.error("DB getUserByEmail failed:", error);
+      return undefined;
+    }
+  }
+
+  async createUserWithPassword(data: { email: string; passwordHash: string; emailVerificationToken: string }): Promise<User> {
+    try {
+      const [user] = await db
+        .insert(users)
+        .values({
+          email: data.email,
+          passwordHash: data.passwordHash,
+          emailVerificationToken: data.emailVerificationToken,
+          emailVerified: false,
+        })
+        .returning();
+      await this.upsertUserStats({ userId: user.id }).catch(() => {});
+      return user;
+    } catch (error) {
+      console.error("DB createUserWithPassword failed:", error);
+      throw error;
+    }
+  }
+
+  async verifyUserEmail(userId: string): Promise<void> {
+    try {
+      await db.update(users).set({ emailVerified: true, emailVerificationToken: null }).where(eq(users.id, userId));
+    } catch (error) {
+      console.error("DB verifyUserEmail failed:", error);
+      throw error;
     }
   }
 
