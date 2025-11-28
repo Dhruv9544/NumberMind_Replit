@@ -473,24 +473,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Game not found" });
       }
       
-      if (game.player1Id !== userId) {
+      // Allow both player1 and player2 to set their secret
+      if (game.player1Id === userId) {
+        game.player1Secret = secretNumber;
+      } else if (game.player2Id === userId) {
+        game.player2Secret = secretNumber;
+      } else {
         return res.status(403).json({ message: "Not authorized" });
       }
 
-      game.player1Secret = secretNumber;
-
-      if (game.gameMode === 'ai' || game.gameMode === 'random') {
-        // Generate AI secret for AI and random opponent modes
+      // For AI modes, generate AI secret and start immediately
+      if (game.gameMode === 'ai') {
         game.player2Id = 'AI';
         game.player2Secret = GameEngine.generateRandomNumber();
         game.status = 'active';
         game.startedAt = new Date();
-        game.currentTurn = userId;
-      } else {
-        // Multiplayer - wait for other player
+        game.currentTurn = game.player1Id;
+      } 
+      // For random opponent mode, start when first player sets secret (AI will replace if opponent joins)
+      else if (game.gameMode === 'random' && game.player1Id === userId && !game.player2Secret) {
+        game.player2Id = 'AI';
+        game.player2Secret = GameEngine.generateRandomNumber();
         game.status = 'active';
         game.startedAt = new Date();
-        game.currentTurn = userId;
+        game.currentTurn = game.player1Id;
+      }
+      // For friend/multiplayer modes, only activate when BOTH set secrets
+      else if ((game.gameMode === 'friend') && game.player1Secret && game.player2Secret) {
+        game.status = 'active';
+        game.startedAt = new Date();
+        game.currentTurn = game.player1Id;
       }
       
       gameStore.updateGame(gameId, game);
@@ -513,7 +525,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const game = gameStore.getGame(gameId);
-      if (!game || game.status !== 'active') {
+      if (!game) {
+        return res.status(404).json({ message: "Game not found" });
+      }
+      
+      if (game.status !== 'active') {
         return res.status(400).json({ message: "Game not active" });
       }
       
@@ -521,10 +537,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Not your turn" });
       }
       
-      const opponentSecret = game.player1Id === userId ? game.player2Secret : game.player1Secret;
-      if (!opponentSecret) {
-        return res.status(400).json({ message: "Opponent secret not set" });
+      // Verify both secrets exist
+      if (!game.player1Secret || !game.player2Secret) {
+        return res.status(400).json({ message: "Both players must set their secrets first" });
       }
+      
+      const opponentSecret = game.player1Id === userId ? game.player2Secret : game.player1Secret;
       
       const feedback = GameEngine.calculateFeedback(guess, opponentSecret);
       const isWin = GameEngine.checkWinCondition(guess, opponentSecret);
