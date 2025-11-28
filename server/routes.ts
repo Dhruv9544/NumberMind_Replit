@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { gameStore } from "./gameStore";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { GameEngine } from "./gameEngine";
+import { storage } from "./storage";
 
 interface WSClient extends WebSocket {
   userId?: string;
@@ -14,14 +15,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
 
+  // Inject storage into gameStore for database persistence
+  gameStore.setStorage(storage);
+
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      let profile = gameStore.getProfile(userId);
+      let profile = await gameStore.getProfile(userId);
       
       if (!profile) {
-        profile = gameStore.getOrCreateProfile(userId, {
+        profile = await gameStore.getOrCreateProfile(userId, {
           name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
           email: req.user.claims.email,
           avatar: req.user.claims.picture,
@@ -68,9 +72,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Username already taken" });
       }
 
-      let profile = gameStore.getProfile(userId);
+      let profile = await gameStore.getProfile(userId);
       if (!profile) {
-        profile = gameStore.getOrCreateProfile(userId, {
+        profile = await gameStore.getOrCreateProfile(userId, {
           name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
           email: req.user.claims.email,
           avatar: req.user.claims.picture,
@@ -78,7 +82,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       profile.username = username;
-      gameStore.updateProfile(userId, profile);
+      await gameStore.updateProfile(userId, profile);
       
       res.json({ success: true, username });
     } catch (error) {
@@ -155,11 +159,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Add to matchmaking queue for random mode
       if (gameMode === 'random') {
-        const profile = gameStore.getProfile(oderId);
         matchmakingQueue.push({
           oderId: oderId,
           oderofileId: oderId,
-          profileName: profile?.username || profile?.name || 'Player',
+          profileName: 'Player',
           gameId: game.id,
           timestamp: new Date(),
         });
@@ -167,7 +170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create challenge for friend mode
       if (gameMode === 'friend' && friendId && friendName) {
-        const userName = gameStore.getProfile(oderId)?.username || req.user.claims.given_name || 'A player';
+        const userName = req.user.claims.given_name || 'A player';
         const challenge = gameStore.createChallenge({
           gameId: game.id,
           fromPlayerId: oderId,
@@ -334,10 +337,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/profile", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      let profile = gameStore.getProfile(userId);
+      let profile = await gameStore.getProfile(userId);
       
       if (!profile) {
-        profile = gameStore.getOrCreateProfile(userId, {
+        profile = await gameStore.getOrCreateProfile(userId, {
           name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
           email: req.user.claims.email,
           avatar: req.user.claims.picture,
@@ -354,7 +357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/profile/:userId", isAuthenticated, async (req: any, res) => {
     try {
       const { userId } = req.params;
-      const profile = gameStore.getProfile(userId);
+      const profile = await gameStore.getProfile(userId);
       
       if (!profile) {
         return res.status(404).json({ message: "User not found" });
@@ -372,15 +375,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { bio, avatar } = req.body;
       
-      let profile = gameStore.getProfile(userId);
+      let profile = await gameStore.getProfile(userId);
       if (!profile) {
-        profile = gameStore.getOrCreateProfile(userId, {
+        profile = await gameStore.getOrCreateProfile(userId, {
           name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
           email: req.user.claims.email,
         });
       }
       
-      profile = gameStore.updateProfile(userId, { bio, avatar });
+      profile = await gameStore.updateProfile(userId, { bio, avatar });
       res.json(profile);
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -563,12 +566,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         gameStore.updateGame(gameId, game);
         
         // Update stats for winner
-        gameStore.updateStats(userId, gameId);
+        await gameStore.updateStats(userId, gameId);
         
         // Update stats for opponent (if human)
         const opponentId = game.player1Id === userId ? game.player2Id : game.player1Id;
         if (opponentId && opponentId !== 'AI') {
-          gameStore.updateStats(opponentId, gameId);
+          await gameStore.updateStats(opponentId, gameId);
         }
       } else {
         game.currentTurn = game.player1Id === userId ? game.player2Id : game.player1Id;
@@ -577,7 +580,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // AI move after delay
       if ((game.gameMode === 'ai' || game.gameMode === 'random') && game.player2Id === 'AI' && !isWin) {
-        setTimeout(() => {
+        setTimeout(async () => {
           try {
             const updatedGame = gameStore.getGame(gameId);
             if (!updatedGame || updatedGame.status !== 'active') return;
@@ -605,7 +608,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 gameStore.updateGame(gameId, updatedGame);
                 
                 // Update stats for human player who lost to AI
-                gameStore.updateStats(updatedGame.player1Id, gameId);
+                await gameStore.updateStats(updatedGame.player1Id, gameId);
               } else {
                 updatedGame.currentTurn = updatedGame.player1Id;
                 gameStore.updateGame(gameId, updatedGame);
