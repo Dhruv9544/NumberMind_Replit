@@ -71,7 +71,11 @@ export interface IStorage {
  * To use PostgreSQL database:
  * 1. Go to Replit Secrets tab and verify DATABASE_URL has correct credentials
  * 2. Comment out: export const storage = new MemStorage();
- * 3. Uncomment: export const storage = new DatabaseStorage();
+ * 3. Uncomment: // PRODUCTION: Switch to DatabaseStorage once DATABASE_URL credentials are valid
+// export const storage = new DatabaseStorage();
+
+// DEVELOPMENT: Using MemStorage - switch to above line once DB is ready
+export const storage = new MemStorage();
  * 4. Run: npm run db:push
  * 5. Restart workflow
  * 
@@ -360,4 +364,8 @@ export class MemStorage implements IStorage {
   }
 }
 
+// PRODUCTION: Switch to DatabaseStorage once DATABASE_URL credentials are valid
+// export const storage = new DatabaseStorage();
+
+// DEVELOPMENT: Using MemStorage - switch to above line once DB is ready
 export const storage = new MemStorage();

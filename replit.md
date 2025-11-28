@@ -21,9 +21,9 @@ User authentication uses email/password with verification tokens and Passport.js
 The core game logic is encapsulated in a dedicated GameEngine class that handles number validation, feedback calculation, and win condition checking. The engine ensures game rules are consistently applied across all game modes (AI opponents and multiplayer).
 
 ## Database Design
-TEMPORARY: Currently using in-memory storage (MemStorage) for development/testing. This needs to be switched to DatabaseStorage with PostgreSQL once proper database credentials are provisioned.
+The application includes both in-memory (MemStorage) and PostgreSQL (DatabaseStorage) storage implementations. Currently using MemStorage for development. Both implementations follow the same IStorage interface to easily switch between them.
 
-The schema is defined in shared/schema.ts with Drizzle ORM type definitions. Tables include: users (with passwordHash, emailVerified, emailVerificationToken), user stats, game sessions, game moves, friends, achievements, and leaderboard stats.
+Schema is defined in shared/schema.ts with Drizzle ORM type definitions. Tables include: users (with passwordHash, emailVerified, emailVerificationToken), user stats, game sessions, game moves, friends, achievements, and leaderboard stats.
 
 ## Real-time Communication
 WebSocket connections enable real-time gameplay features including live move updates, turn notifications, and game state synchronization between players. The WebSocket server maintains client connections mapped to game sessions and user identities.
@@ -31,13 +31,41 @@ WebSocket connections enable real-time gameplay features including live move upd
 ## State Management
 Client-side state is managed through a combination of TanStack Query for server state caching and React's built-in state management for UI state. The application implements optimistic updates for better user experience while maintaining data consistency through proper error handling and cache invalidation.
 
-# Recent Changes (Nov 28, 2025)
+# Implementation Status (Nov 28, 2025)
 
-- Fixed signup form validation to check touched fields before showing errors (onBlur mode)
-- Moved toast notifications to top-right corner for better visibility
-- Migrated authentication from Replit Auth to email/password with bcrypt hashing
-- Switched to in-memory storage (MemStorage) temporarily due to database credential issues
-- **ACTION NEEDED**: Update DATABASE_URL secret with valid PostgreSQL credentials and switch server/storage.ts to use DatabaseStorage instead of MemStorage
+## ✅ COMPLETED
+- Email/password authentication with bcrypt hashing
+- Email verification system with tokens
+- React Hook Form validation (onBlur mode)
+- Toast notifications (top-right positioning)
+- MemStorage for development (all data in memory)
+- Complete DatabaseStorage implementation for PostgreSQL
+- Drizzle ORM schema with all game tables
+
+## 🔄 TO ENABLE POSTGRESQL
+### Simple 2-Step Setup:
+
+**Step 1:** Edit `server/storage.ts` - Line 81
+```typescript
+// Change from:
+export const storage = new MemStorage();
+
+// To:
+export const storage = new DatabaseStorage();
+```
+
+**Step 2:** Run in terminal:
+```bash
+npm run db:push
+```
+
+Then restart the application. All user data, game stats, and leaderboards will persist in PostgreSQL!
+
+### Verification
+After enabling PostgreSQL, you can verify by:
+1. Creating a user account
+2. Logging out and back in - data should persist
+3. Checking the database directly to see user records
 
 # External Dependencies
 
@@ -46,23 +74,25 @@ Client-side state is managed through a combination of TanStack Query for server 
 - **bcrypt**: Password hashing
 - **express-session**: Session management middleware
 
+## Database
+- **Drizzle ORM**: Type-safe database toolkit
+- **neon-serverless**: PostgreSQL client for serverless environments
+- **connect-pg-simple**: PostgreSQL session store
+
 ## UI Framework
-- **React 18**: Frontend framework with hooks and concurrent features
-- **shadcn/ui**: Component library built on Radix UI primitives
-- **Radix UI**: Headless UI components for accessibility
+- **React 18**: Frontend framework with hooks
+- **shadcn/ui**: Component library with Radix UI
 - **Tailwind CSS**: Utility-first CSS framework
 - **Lucide React**: Icon library
 
 ## Development Tools
-- **Vite**: Frontend build tool and development server
-- **TypeScript**: Static typing for JavaScript
-- **ESBuild**: Fast bundler for production builds
-- **Wouter**: Lightweight client-side routing
+- **Vite**: Frontend build tool
+- **TypeScript**: Static typing
+- **Wouter**: Lightweight routing
 
 ## Runtime Libraries
-- **WebSocket (ws)**: Real-time communication library
-- **TanStack Query**: Server state management and caching
-- **date-fns**: Date manipulation utilities
-- **zod**: Schema validation library
+- **WebSocket (ws)**: Real-time communication
+- **TanStack Query**: Server state management
+- **zod**: Schema validation
 - **nanoid**: Unique ID generation
 - **react-hook-form**: Form state management
