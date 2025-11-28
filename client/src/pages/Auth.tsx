@@ -322,11 +322,11 @@ export default function AuthPage() {
                     {...signupForm.register('confirmPassword')}
                     disabled={loading}
                     className={`bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400 ${
-                      signupForm.formState.errors.confirmPassword && signupForm.formState.touchedFields.confirmPassword ? 'border-red-500 border-2' : ''
+                      signupForm.formState.errors.confirmPassword && (signupForm.formState.touchedFields.confirmPassword || signupForm.formState.touchedFields.password) ? 'border-red-500 border-2' : ''
                     }`}
                     data-testid="input-confirm-password"
                   />
-                  {signupForm.formState.errors.confirmPassword && signupForm.formState.touchedFields.confirmPassword && (
+                  {signupForm.formState.errors.confirmPassword && (signupForm.formState.touchedFields.confirmPassword || signupForm.formState.touchedFields.password) && (
                     <p className="text-red-500 text-sm mt-1">{signupForm.formState.errors.confirmPassword.message}</p>
                   )}
                 </div>
