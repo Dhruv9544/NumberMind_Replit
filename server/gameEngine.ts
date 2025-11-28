@@ -29,27 +29,18 @@ export class GameEngine {
     
     let correctPositions = 0;
     let correctDigits = 0;
-    const usedSecretIndices = new Set<number>();
     
-    // First pass: Count correct positions (exact matches)
+    // Count correct positions (exact matches)
     for (let i = 0; i < guessDigits.length; i++) {
       if (guessDigits[i] === secretDigits[i]) {
         correctPositions++;
-        usedSecretIndices.add(i);
       }
     }
     
-    // Second pass: Count correct digits in wrong positions
-    // Each digit in secret can only be matched once
-    for (let i = 0; i < guessDigits.length; i++) {
-      if (guessDigits[i] !== secretDigits[i]) { // Skip already matched positions
-        for (let j = 0; j < secretDigits.length; j++) {
-          if (!usedSecretIndices.has(j) && guessDigits[i] === secretDigits[j]) {
-            correctDigits++;
-            usedSecretIndices.add(j);
-            break; // Found match for this guess digit
-          }
-        }
+    // Count all correct digits (regardless of position)
+    for (const digit of guessDigits) {
+      if (secretDigits.includes(digit)) {
+        correctDigits++;
       }
     }
     
