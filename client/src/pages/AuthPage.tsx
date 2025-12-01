@@ -80,9 +80,9 @@ export default function AuthPage() {
       if (!isLogin) {
         setIsLogin(true); // Switch to login mode after signup
       } else {
-        // After login, invalidate auth query and redirect to dashboard
-        queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-        setTimeout(() => setLocation("/"), 100); // Small delay to ensure query invalidation
+        // After login, refetch auth and redirect to dashboard
+        await queryClient.refetchQueries({ queryKey: ['/api/auth/user'] });
+        setLocation("/"); // Redirect to dashboard after login
       }
     } catch (error) {
       toast({

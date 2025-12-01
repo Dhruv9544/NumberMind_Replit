@@ -17,10 +17,10 @@ import Profile from "@/pages/Profile";
 import Notifications from "@/pages/Notifications";
 
 function Router() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   
   // Check if user is authenticated
-  const { data: user, isLoading, isError } = useQuery({
+  const { data: user, isLoading } = useQuery({
     queryKey: ['/api/auth/user'],
     retry: false,
   });
@@ -30,22 +30,21 @@ function Router() {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
-  // If on auth page, always show it
-  if (location === '/auth' || location.startsWith('/auth')) {
-    return <Switch>
-      <Route path="/auth" component={AuthPage} />
-      <Route component={AuthPage} />
-    </Switch>;
-  }
-
-  // If not authenticated (401 error or no user), redirect to auth
-  if (isError || !user) {
+  // If not authenticated, always show auth page
+  if (!user) {
+    if (location !== '/auth') {
+      setLocation('/auth');
+    }
     return <Switch>
       <Route path="*" component={AuthPage} />
     </Switch>;
   }
 
   // User is authenticated, show app
+  if (location === '/auth') {
+    setLocation('/');
+  }
+
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
