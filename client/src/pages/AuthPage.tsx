@@ -51,6 +51,7 @@ export default function AuthPage() {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
@@ -80,7 +81,8 @@ export default function AuthPage() {
       if (!isLogin) {
         setIsLogin(true); // Switch to login mode after signup
       } else {
-        // After login, refetch auth and redirect to dashboard
+        // After login, invalidate and refetch auth query, then redirect
+        await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         await queryClient.refetchQueries({ queryKey: ['/api/auth/user'] });
         setLocation("/"); // Redirect to dashboard after login
       }

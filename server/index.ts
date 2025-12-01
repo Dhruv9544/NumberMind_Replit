@@ -1,7 +1,32 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { storage } from "./storage";
 import { runMigrations } from "./db";
+
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+// Initialize memory store for sessions
+const memoryStore = MemoryStore(session);
+
+// Session configuration - MUST come before routes
+app.use(session({
+  store: new memoryStore({
+    checkPeriod: 86400000 // 24 hours
+  }),
+  secret: process.env.SESSION_SECRET || 'dev-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax'
+  }
+}));
 
 // Session middleware - check if user is authenticated
 const sessionMiddleware = (req: any, _res: any, next: any) => {
@@ -9,16 +34,6 @@ const sessionMiddleware = (req: any, _res: any, next: any) => {
   req.user = req.session?.userId ? { id: req.session.userId } : null;
   next();
 };
-
-const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-
-// Session configuration
-app.use((req: any, res: any, next: any) => {
-  if (!req.session) req.session = {};
-  next();
-});
 
 app.use(sessionMiddleware);
 

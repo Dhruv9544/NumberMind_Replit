@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ import Notifications from "@/pages/Notifications";
 
 function Router() {
   const [location, setLocation] = useLocation();
+  const [shouldRedirect, setShouldRedirect] = useState(false);
   
   // Check if user is authenticated
   const { data: user, isLoading } = useQuery({
@@ -25,26 +27,32 @@ function Router() {
     retry: false,
   });
 
+  // Handle redirects using effect instead of during render
+  useEffect(() => {
+    if (isLoading) return;
+    
+    if (!user && location !== '/auth') {
+      setShouldRedirect(true);
+      setLocation('/auth');
+    } else if (user && location === '/auth') {
+      setShouldRedirect(true);
+      setLocation('/');
+    }
+  }, [user, isLoading, location, setLocation]);
+
   // Show loading state
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
-  // If not authenticated, always show auth page
+  // If not authenticated, show auth page
   if (!user) {
-    if (location !== '/auth') {
-      setLocation('/auth');
-    }
     return <Switch>
       <Route path="*" component={AuthPage} />
     </Switch>;
   }
 
   // User is authenticated, show app
-  if (location === '/auth') {
-    setLocation('/');
-  }
-
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
