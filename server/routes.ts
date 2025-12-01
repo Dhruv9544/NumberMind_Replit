@@ -4,20 +4,103 @@ import { WebSocketServer, WebSocket } from "ws";
 import { gameStore } from "./gameStore";
 import { GameEngine } from "./gameEngine";
 import { storage } from "./storage";
+import bcrypt from "bcrypt";
+import { loginSchema, signupSchema } from "@shared/schema";
 
 interface WSClient extends WebSocket {
   userId?: string;
   gameId?: string;
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth removed - all routes are now public
+// Middleware to require authentication
+const requireAuth = (req: any, res: any, next: any) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  next();
+};
 
+export async function registerRoutes(app: Express): Promise<Server> {
   // Inject storage into gameStore for database persistence
   gameStore.setStorage(storage);
 
   // Auth routes
-  app.get('/api/auth/user', async (req: any, res) => {
+  app.post('/api/auth/signup', async (req: any, res) => {
+    try {
+      const parsed = signupSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid email or password" });
+      }
+
+      const { email, password } = parsed.data;
+
+      // Check if user exists
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+      const verificationToken = Math.random().toString(36).substring(7);
+
+      // Create user
+      const user = await storage.createUserWithPassword({
+        email,
+        passwordHash,
+        emailVerificationToken: verificationToken,
+      });
+
+      // Auto verify email for this implementation
+      await storage.verifyUserEmail(user.id);
+
+      // Set session
+      req.session!.userId = user.id;
+
+      res.json({ success: true, userId: user.id });
+    } catch (error) {
+      console.error("Signup error:", error);
+      res.status(500).json({ message: "Signup failed" });
+    }
+  });
+
+  app.post('/api/auth/login', async (req: any, res) => {
+    try {
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid credentials" });
+      }
+
+      const { email, password } = parsed.data;
+
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Compare password
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Set session
+      req.session!.userId = user.id;
+
+      res.json({ success: true, userId: user.id });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post('/api/auth/logout', (req: any, res) => {
+    req.session!.userId = undefined;
+    res.json({ success: true });
+  });
+
+  app.get('/api/auth/user', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const user = await storage.getUser(userId);
@@ -56,7 +139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Set username
-  app.post('/api/auth/set-username', async (req: any, res) => {
+  app.post('/api/auth/set-username', requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { username } = req.body;
@@ -94,7 +177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const matchmakingQueue: { oderId: string; oderofileId: string; profileName: string; gameId: string; timestamp: Date }[] = [];
 
   // Game routes
-  app.post("/api/games", async (req: any, res) => {
+  app.post("/api/games", requireAuth, async (req: any, res) => {
     try {
       const oderId = req.user.id;
       const { gameMode, difficulty, friendId, friendName } = req.body;
@@ -200,7 +283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get pending challenges for user
-  app.get("/api/challenges", async (req: any, res) => {
+  app.get("/api/challenges", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const challenges = gameStore.getPendingChallengesForUser(userId);
@@ -212,7 +295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Accept challenge
-  app.post("/api/challenges/:challengeId/accept", async (req: any, res) => {
+  app.post("/api/challenges/:challengeId/accept", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { challengeId } = req.params;
@@ -244,7 +327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reject challenge
-  app.post("/api/challenges/:challengeId/reject", async (req: any, res) => {
+  app.post("/api/challenges/:challengeId/reject", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { challengeId } = req.params;
@@ -267,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Join game by code
-  app.post("/api/games/join/:code", async (req: any, res) => {
+  app.post("/api/games/join/:code", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { code } = req.params;
@@ -295,7 +378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Friends endpoints
-  app.get("/api/friends", async (req: any, res) => {
+  app.get("/api/friends", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const friends = gameStore.getFriends(userId);
@@ -306,7 +389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/friends/add", async (req: any, res) => {
+  app.post("/api/friends/add", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { friendId, friendName, friendEmail } = req.body;
@@ -319,7 +402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/friends/:friendId/accept", async (req: any, res) => {
+  app.post("/api/friends/:friendId/accept", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { friendId } = req.params;
@@ -333,7 +416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Profile endpoints
-  app.get("/api/profile", async (req: any, res) => {
+  app.get("/api/profile", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       let profile = await gameStore.getProfile(userId);
@@ -369,7 +452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/profile", async (req: any, res) => {
+  app.patch("/api/profile", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { bio, avatar } = req.body;

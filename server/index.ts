@@ -3,22 +3,24 @@ import { registerRoutes } from "./routes";
 import { storage } from "./storage";
 import { runMigrations } from "./db";
 
-// Simple guest session middleware - generates temporary userId for each session
-const generateGuestSession = (req: any, _res: any, next: any) => {
-  if (!req.user) {
-    req.user = {
-      id: `guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      email: `guest-${Date.now()}@numbermind.local`,
-      username: `Guest`,
-    };
-  }
+// Session middleware - check if user is authenticated
+const sessionMiddleware = (req: any, _res: any, next: any) => {
+  // Set userId from session or undefined if not authenticated
+  req.user = req.session?.userId ? { id: req.session.userId } : null;
   next();
 };
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(generateGuestSession);
+
+// Session configuration
+app.use((req: any, res: any, next: any) => {
+  if (!req.session) req.session = {};
+  next();
+});
+
+app.use(sessionMiddleware);
 
 app.use((req, res, next) => {
   const start = Date.now();
