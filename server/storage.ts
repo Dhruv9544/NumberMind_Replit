@@ -414,9 +414,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUserStats(stats: InsertUserStats): Promise<UserStats> {
-    await db
-      .insert(userStats)
-      .values({
+    // Try to get existing stats
+    const existing = await this.getUserStats(stats.userId);
+    
+    if (existing) {
+      // Update existing
+      await db
+        .update(userStats)
+        .set({
+          gamesPlayed: stats.gamesPlayed ?? existing.gamesPlayed,
+          gamesWon: stats.gamesWon ?? existing.gamesWon,
+          currentStreak: stats.currentStreak ?? existing.currentStreak,
+          bestStreak: stats.bestStreak ?? existing.bestStreak,
+          totalGuesses: stats.totalGuesses ?? existing.totalGuesses,
+          fastestWin: stats.fastestWin ?? existing.fastestWin,
+        })
+        .where(eq(userStats.userId, stats.userId));
+    } else {
+      // Insert new
+      await db.insert(userStats).values({
         userId: stats.userId,
         gamesPlayed: stats.gamesPlayed || 0,
         gamesWon: stats.gamesWon || 0,
@@ -424,18 +440,9 @@ export class DatabaseStorage implements IStorage {
         bestStreak: stats.bestStreak || 0,
         totalGuesses: stats.totalGuesses || 0,
         fastestWin: stats.fastestWin,
-      })
-      .onConflictDoUpdate({
-        target: userStats.userId,
-        set: {
-          gamesPlayed: stats.gamesPlayed || undefined,
-          gamesWon: stats.gamesWon || undefined,
-          currentStreak: stats.currentStreak || undefined,
-          bestStreak: stats.bestStreak || undefined,
-          totalGuesses: stats.totalGuesses || undefined,
-          fastestWin: stats.fastestWin,
-        },
       });
+    }
+    
     const result = await this.getUserStats(stats.userId);
     return result!;
   }
