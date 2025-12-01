@@ -74,8 +74,12 @@ export default function AuthPage() {
       setPassword("");
       setErrors({});
 
-      // Redirect to dashboard
-      setLocation("/");
+      // After signup, switch to login view. After login, redirect to dashboard.
+      if (!isLogin) {
+        setIsLogin(true); // Switch to login mode after signup
+      } else {
+        setLocation("/"); // Redirect to dashboard after login
+      }
     } catch (error) {
       toast({
         title: "Error",
