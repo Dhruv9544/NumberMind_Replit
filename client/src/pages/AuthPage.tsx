@@ -12,9 +12,36 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  // Client-side validation
+  const validateInputs = (): boolean => {
+    const newErrors: { email?: string; password?: string } = {};
+
+    if (!email) {
+      newErrors.email = "Email is required";
+    } else if (!email.includes("@")) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    if (!password) {
+      newErrors.password = "Password is required";
+    } else if (password.length < 6 && !isLogin) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate inputs first
+    if (!validateInputs()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -25,8 +52,9 @@ export default function AuthPage() {
         body: JSON.stringify({ email, password }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
         toast({
           title: "Error",
           description: data.message || "Authentication failed",
@@ -38,8 +66,13 @@ export default function AuthPage() {
 
       toast({
         title: "Success",
-        description: isLogin ? "Logged in successfully" : "Account created successfully",
+        description: data.message || (isLogin ? "Logged in successfully" : "Account created successfully"),
       });
+
+      // Clear form
+      setEmail("");
+      setPassword("");
+      setErrors({});
 
       // Redirect to dashboard
       setLocation("/");
@@ -74,20 +107,31 @@ export default function AuthPage() {
                 type="email"
                 placeholder="Email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errors.email) setErrors({ ...errors, email: undefined });
+                }}
                 required
                 data-testid="input-email"
+                className={errors.email ? "border-red-500" : ""}
               />
+              {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
             </div>
             <div>
               <Input
                 type="password"
                 placeholder="Password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errors.password) setErrors({ ...errors, password: undefined });
+                }}
                 required
                 data-testid="input-password"
+                className={errors.password ? "border-red-500" : ""}
               />
+              {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+              {!isLogin && <p className="text-gray-500 text-xs mt-1">Min 6 characters</p>}
             </div>
             <Button
               type="submit"

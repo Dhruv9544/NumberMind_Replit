@@ -29,7 +29,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const parsed = signupSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid email or password" });
+        const error = parsed.error.errors[0];
+        return res.status(400).json({ message: error.message });
       }
 
       const { email, password } = parsed.data;
@@ -37,7 +38,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user exists
       const existing = await storage.getUserByEmail(email);
       if (existing) {
-        return res.status(400).json({ message: "Email already registered" });
+        return res.status(400).json({ message: "This email is already registered. Please login instead." });
       }
 
       // Hash password
@@ -57,10 +58,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set session
       req.session!.userId = user.id;
 
-      res.json({ success: true, userId: user.id });
+      res.json({ success: true, userId: user.id, message: "Account created successfully!" });
     } catch (error) {
       console.error("Signup error:", error);
-      res.status(500).json({ message: "Signup failed" });
+      res.status(500).json({ message: "Failed to create account. Please try again." });
     }
   });
 
@@ -68,7 +69,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ message: "Invalid credentials" });
+        const error = parsed.error.errors[0];
+        return res.status(400).json({ message: error.message });
       }
 
       const { email, password } = parsed.data;
@@ -76,22 +78,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Find user
       const user = await storage.getUserByEmail(email);
       if (!user || !user.passwordHash) {
-        return res.status(401).json({ message: "Invalid credentials" });
+        return res.status(401).json({ message: "Email not found. Please sign up first." });
       }
 
       // Compare password
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
-        return res.status(401).json({ message: "Invalid credentials" });
+        return res.status(401).json({ message: "Incorrect password. Please try again." });
       }
 
       // Set session
       req.session!.userId = user.id;
 
-      res.json({ success: true, userId: user.id });
+      res.json({ success: true, userId: user.id, message: "Logged in successfully!" });
     } catch (error) {
       console.error("Login error:", error);
-      res.status(500).json({ message: "Login failed" });
+      res.status(500).json({ message: "Login failed. Please try again." });
     }
   });
 
