@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navbar } from "@/components/Navbar";
 import AuthPage from "@/pages/AuthPage";
+import UsernameSetupPage from "@/pages/UsernameSetupPage";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
 import GameSetup from "@/pages/GameSetupNew";
@@ -19,7 +20,6 @@ import Notifications from "@/pages/Notifications";
 
 function Router() {
   const [location, setLocation] = useLocation();
-  const [shouldRedirect, setShouldRedirect] = useState(false);
   
   // Check if user is authenticated
   const { data: user, isLoading } = useQuery({
@@ -32,10 +32,10 @@ function Router() {
     if (isLoading) return;
     
     if (!user && location !== '/auth') {
-      setShouldRedirect(true);
       setLocation('/auth');
-    } else if (user && location === '/auth') {
-      setShouldRedirect(true);
+    } else if (user && !user.usernameSet && location !== '/setup-username') {
+      setLocation('/setup-username');
+    } else if (user && user.usernameSet && (location === '/auth' || location === '/setup-username')) {
       setLocation('/');
     }
   }, [user, isLoading, location, setLocation]);
@@ -52,7 +52,15 @@ function Router() {
     </Switch>;
   }
 
-  // User is authenticated, show app
+  // If username not set, show username setup
+  if (!user.usernameSet) {
+    return <Switch>
+      <Route path="/setup-username" component={UsernameSetupPage} />
+      <Route path="*" component={UsernameSetupPage} />
+    </Switch>;
+  }
+
+  // User is authenticated and has username, show app
   return (
     <Switch>
       <Route path="/" component={Dashboard} />

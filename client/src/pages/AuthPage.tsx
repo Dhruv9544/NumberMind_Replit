@@ -16,22 +16,27 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  // Client-side validation
+  // Client-side validation with real-time feedback
+  const validateEmail = (value: string): string | undefined => {
+    if (!value) return "Email is required";
+    if (!value.includes("@") || !value.includes(".")) return "Please enter a valid email address";
+    return undefined;
+  };
+
+  const validatePassword = (value: string): string | undefined => {
+    if (!value) return "Password is required";
+    if (value.length < 6 && !isLogin) return "Password must be at least 6 characters";
+    if (!isLogin && !/[A-Z]/.test(value)) return "Password must contain at least one uppercase letter";
+    if (!isLogin && !/[0-9]/.test(value)) return "Password must contain at least one number";
+    return undefined;
+  };
+
   const validateInputs = (): boolean => {
+    const emailError = validateEmail(email);
+    const passwordError = validatePassword(password);
     const newErrors: { email?: string; password?: string } = {};
-
-    if (!email) {
-      newErrors.email = "Email is required";
-    } else if (!email.includes("@")) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    if (!password) {
-      newErrors.password = "Password is required";
-    } else if (password.length < 6 && !isLogin) {
-      newErrors.password = "Password must be at least 6 characters";
-    }
-
+    if (emailError) newErrors.email = emailError;
+    if (passwordError) newErrors.password = passwordError;
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -84,7 +89,8 @@ export default function AuthPage() {
         // After login, invalidate and refetch auth query, then redirect
         await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         await queryClient.refetchQueries({ queryKey: ['/api/auth/user'] });
-        setLocation("/"); // Redirect to dashboard after login
+        // Router component will handle redirect based on usernameSet
+        setLocation("/"); 
       }
     } catch (error) {
       toast({
@@ -118,8 +124,10 @@ export default function AuthPage() {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (errors.email) setErrors({ ...errors, email: undefined });
+                  const value = e.target.value;
+                  setEmail(value);
+                  const error = validateEmail(value);
+                  setErrors({ ...errors, email: error });
                 }}
                 required
                 data-testid="input-email"
@@ -133,15 +141,24 @@ export default function AuthPage() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (errors.password) setErrors({ ...errors, password: undefined });
+                  const value = e.target.value;
+                  setPassword(value);
+                  const error = validatePassword(value);
+                  setErrors({ ...errors, password: error });
                 }}
                 required
                 data-testid="input-password"
                 className={errors.password ? "border-red-500" : ""}
               />
               {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
-              {!isLogin && <p className="text-gray-500 text-xs mt-1">Min 6 characters</p>}
+              {!isLogin && (
+                <div className="text-gray-500 text-xs mt-2 space-y-1">
+                  <p>Password requirements:</p>
+                  <p className={password.length >= 6 ? "text-green-600" : ""}>✓ At least 6 characters</p>
+                  <p className={/[A-Z]/.test(password) ? "text-green-600" : ""}>✓ One uppercase letter</p>
+                  <p className={/[0-9]/.test(password) ? "text-green-600" : ""}>✓ One number</p>
+                </div>
+              )}
             </div>
             <Button
               type="submit"
