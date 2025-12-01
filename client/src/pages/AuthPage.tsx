@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,7 +80,9 @@ export default function AuthPage() {
       if (!isLogin) {
         setIsLogin(true); // Switch to login mode after signup
       } else {
-        setLocation("/"); // Redirect to dashboard after login
+        // After login, invalidate auth query and redirect to dashboard
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+        setTimeout(() => setLocation("/"), 100); // Small delay to ensure query invalidation
       }
     } catch (error) {
       toast({
