@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
@@ -71,14 +72,14 @@ app.use((req, res, next) => {
 (async () => {
   // Run database migrations first
   await runMigrations();
-  
+
   // Initialize AI user for AI game functionality
   try {
     await storage.initializeAIUser();
   } catch (error) {
     console.warn("⚠️  Could not initialize AI user:", (error as any)?.message);
   }
-  
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -106,7 +107,6 @@ app.use((req, res, next) => {
   server.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
   });
