@@ -14,7 +14,7 @@ export default function UsernameSetupPage() {
   const [errors, setErrors] = useState<{ username?: string }>({});
 
   // Get current user data
-  const { data: user } = useQuery({
+  const { data: user } = useQuery<any>({
     queryKey: ['/api/auth/user'],
     retry: false,
   });
