@@ -282,7 +282,7 @@ export default function GamePlay() {
               
               {/* Compact Number Pad */}
               <NumberPad
-                onDigitClick={inputDigit}
+                onDigitClick={(digit) => inputDigit(digit.toString())}
                 onClear={clearInput}
                 onSubmit={handleSubmitGuess}
                 showSubmit

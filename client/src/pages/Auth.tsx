@@ -210,7 +210,6 @@ export default function AuthPage() {
                     placeholder="Email"
                     {...verifyForm.register('email')}
                     disabled={loading}
-                    onBlur={verifyForm.handleBlur}
                     className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
                   />
                   {verifyForm.formState.errors.email && (
@@ -223,7 +222,6 @@ export default function AuthPage() {
                     placeholder="Verification Token"
                     {...verifyForm.register('token')}
                     disabled={loading}
-                    onBlur={verifyForm.handleBlur}
                     className="bg-slate-800 border-purple-500/30 text-white placeholder:text-gray-400"
                   />
                   {verifyForm.formState.errors.token && (

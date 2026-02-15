@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navbar } from "@/components/Navbar";
+import { WebSocketProvider } from "@/context/WebSocketContext";
 import AuthPage from "@/pages/AuthPage";
 import UsernameSetupPage from "@/pages/UsernameSetupPage";
 import NotFound from "@/pages/not-found";
@@ -83,7 +84,9 @@ function App() {
       <TooltipProvider>
         <Toaster />
         <Navbar />
-        <Router />
+        <WebSocketProvider>
+          <Router />
+        </WebSocketProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

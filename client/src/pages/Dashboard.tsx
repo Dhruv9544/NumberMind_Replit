@@ -9,7 +9,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   
-  const { data: challenges = [] } = useQuery({
+  const { data: challenges = [] } = useQuery<Array<{ id: string; status: string; fromPlayerName: string }>>({
     queryKey: ['/api/challenges'],
     refetchInterval: 2000,
   });

@@ -132,7 +132,7 @@ class GameStore {
   addMove(gameId: string, move: Omit<StoredMove, 'id' | 'createdAt'>): StoredMove {
     const game = this.games.get(gameId);
     if (!game) throw new Error('Game not found');
-    
+
     const storedMove: StoredMove = {
       ...move,
       id: 'move-' + Math.random().toString(36).substr(2, 9),
@@ -201,7 +201,7 @@ class GameStore {
       status: 'pending',
       createdAt: new Date(),
     };
-    
+
     if (!this.friends.has(userId)) {
       this.friends.set(userId, []);
     }
@@ -231,7 +231,7 @@ class GameStore {
       id,
       createdAt: new Date(),
     };
-    
+
     if (!this.notifications.has(notification.userId)) {
       this.notifications.set(notification.userId, []);
     }
@@ -253,7 +253,7 @@ class GameStore {
   // Profiles - NOW PERSISTED TO DATABASE
   async getOrCreateProfile(userId: string, data: { name: string; email: string; avatar?: string }): Promise<UserProfile> {
     if (!this.storage) throw new Error('Storage not initialized');
-    
+
     // Check in-memory cache first
     if (this.profiles.has(userId)) {
       return this.profiles.get(userId)!;
@@ -261,7 +261,7 @@ class GameStore {
 
     // Try to load from database
     let dbStats = await this.storage.getUserStats(userId);
-    
+
     if (!dbStats) {
       // Create new stats in database
       dbStats = await this.storage.upsertUserStats({
@@ -274,12 +274,16 @@ class GameStore {
       });
     }
 
+    // Load user data
+    const user = await this.storage.getUser(userId);
+
     const profile: UserProfile = {
       id: userId,
-      name: data.name,
-      email: data.email,
-      avatar: data.avatar,
-      bio: '',
+      name: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || data.name : data.name,
+      email: user?.email || data.email,
+      username: user?.username || undefined,
+      avatar: user?.profileImageUrl || data.avatar,
+      bio: user?.bio || undefined,
       stats: {
         gamesPlayed: dbStats.gamesPlayed || 0,
         gamesWon: dbStats.gamesWon || 0,
@@ -289,7 +293,7 @@ class GameStore {
         totalGuesses: dbStats.totalGuesses || 0,
         averageGuesses: dbStats.gamesPlayed ? Math.round((dbStats.totalGuesses || 0) / dbStats.gamesPlayed) : 0,
       },
-      createdAt: new Date(),
+      createdAt: user?.createdAt || new Date(),
       lastActive: new Date(),
     };
     this.profiles.set(userId, profile);
@@ -298,7 +302,7 @@ class GameStore {
 
   async getProfile(userId: string): Promise<UserProfile | undefined> {
     if (!this.storage) throw new Error('Storage not initialized');
-    
+
     // Check cache first
     if (this.profiles.has(userId)) {
       return this.profiles.get(userId)!;
@@ -308,10 +312,17 @@ class GameStore {
     const dbStats = await this.storage.getUserStats(userId);
     if (!dbStats) return undefined;
 
+    // Load user data
+    const user = await this.storage.getUser(userId);
+    if (!user) return undefined;
+
     const profile: UserProfile = {
       id: userId,
-      name: '',
-      email: '',
+      name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Player',
+      email: user.email || '',
+      username: user.username || undefined,
+      avatar: user.profileImageUrl || undefined,
+      bio: user.bio || undefined,
       stats: {
         gamesPlayed: dbStats.gamesPlayed || 0,
         gamesWon: dbStats.gamesWon || 0,
@@ -321,7 +332,7 @@ class GameStore {
         totalGuesses: dbStats.totalGuesses || 0,
         averageGuesses: dbStats.gamesPlayed ? Math.round((dbStats.totalGuesses || 0) / dbStats.gamesPlayed) : 0,
       },
-      createdAt: new Date(),
+      createdAt: user.createdAt || new Date(),
       lastActive: new Date(),
     };
     this.profiles.set(userId, profile);
@@ -329,19 +340,40 @@ class GameStore {
   }
 
   async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
-    if (!this.profiles.has(userId)) throw new Error('Profile not found');
-    const profile = this.profiles.get(userId)!;
+    if (!this.storage) throw new Error('Storage not initialized');
+
+    let profile = this.profiles.get(userId);
+    if (!profile) {
+      profile = await this.getProfile(userId);
+    }
+
+    if (!profile) throw new Error('Profile not found');
+
     const updated = { ...profile, ...updates };
     this.profiles.set(userId, updated);
+
+    // Persist to database
+    const user = await this.storage.getUser(userId);
+    if (user) {
+      await this.storage.upsertUserWithId(userId, {
+        email: user.email || '',
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        username: updated.username,
+        bio: updated.bio,
+        profileImageUrl: updated.avatar,
+      });
+    }
+
     return updated;
   }
 
   async updateStats(userId: string, gameId: string): Promise<void> {
     if (!this.storage) throw new Error('Storage not initialized');
-    
+
     const profile = this.profiles.get(userId);
     const game = this.games.get(gameId);
-    
+
     if (!profile || !game) return;
 
     profile.stats.gamesPlayed++;
@@ -383,15 +415,22 @@ class GameStore {
       .slice(0, limit);
   }
 
-  searchUsers(query: string): UserProfile[] {
-    const q = query.toLowerCase().replace('@', '');
-    return Array.from(this.profiles.values())
-      .filter(p => 
-        (p.username && p.username.toLowerCase().includes(q)) ||
-        p.name.toLowerCase().includes(q) ||
-        p.email.toLowerCase().includes(q)
-      )
-      .slice(0, 20);
+  async searchUsers(query: string): Promise<UserProfile[]> {
+    if (!this.storage) throw new Error('Storage not initialized');
+
+    // Search in database
+    const users = await this.storage.searchUsers(query);
+
+    // Convert to profiles
+    const results: UserProfile[] = [];
+    for (const user of users) {
+      const profile = await this.getProfile(user.id);
+      if (profile) {
+        results.push(profile);
+      }
+    }
+
+    return results;
   }
 
   expireOldChallenges(): void {

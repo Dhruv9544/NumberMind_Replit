@@ -27,6 +27,8 @@ interface GameState {
   currentTurn?: string;
   winnerId?: string;
   moves: Move[];
+  player1Secret?: string;
+  player2Secret?: string;
 }
 
 export default function GamePlay() {
@@ -129,7 +131,9 @@ export default function GamePlay() {
                 <p className="text-purple-200 mb-4 text-lg">
                   {playerWon
                     ? `You cracked it in ${playerMoves.length} ${playerMoves.length === 1 ? 'guess' : 'guesses'}!`
-                    : `The code was: ${opponentMoves[opponentMoves.length - 1]?.guess || '????'}`}
+                    : `Opponent guessed your code! Their secret number was ${
+                        (user?.id === game.player1Id ? game.player2Secret : game.player1Secret) || '????'
+                      }`}
                 </p>
                 <p className="text-purple-300 mb-8">Final Score: You {playerMoves.length} - {opponentMoves.length} {isAIGame ? 'AI' : 'Opponent'}</p>
                 <Button

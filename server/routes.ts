@@ -107,17 +107,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const user = await storage.getUser(userId);
       let profile = await gameStore.getProfile(userId);
-      
+
       if (!profile && user) {
         profile = await gameStore.getOrCreateProfile(userId, {
           name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-          email: user.email,
-          avatar: user.profileImageUrl,
+          email: user?.email as string,
+          avatar: user?.profileImageUrl as string,
         });
       }
 
       const username = profile?.username || '';
-      
+
       res.json({
         id: userId,
         email: user?.email,
@@ -145,13 +145,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { username } = req.body;
-      
+
       if (!username || username.length < 3) {
         return res.status(400).json({ message: "Username must be at least 3 characters" });
       }
-      
+
       // Check if username already taken
-      const existing = gameStore.searchUsers(username);
+      const existing = await gameStore.searchUsers(username);
       if (existing.some((u: any) => u.id !== userId)) {
         return res.status(400).json({ message: "Username already taken" });
       }
@@ -167,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       profile.username = username;
       await gameStore.updateProfile(userId, profile);
-      
+
       res.json({ success: true, username });
     } catch (error) {
       console.error("Error setting username:", error);
@@ -176,17 +176,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Matchmaking queue for random opponents
-  const matchmakingQueue: { oderId: string; oderofileId: string; profileName: string; gameId: string; timestamp: Date }[] = [];
+  const matchmakingQueue: { userId: string; userProfileId: string; profileName: string; gameId: string; timestamp: Date }[] = [];
 
   // Game routes
   app.post("/api/games", requireAuth, async (req: any, res) => {
     try {
-      const oderId = req.user.id;
+      const userId = req.user.id;
       const { gameMode, difficulty, friendId, friendName } = req.body;
-      
+
       let player2Id: string | undefined = undefined;
       let gameStatus: 'waiting' | 'active' = 'waiting';
-      
+
       // Handle different game modes
       if (gameMode === 'ai') {
         // AI opponent - starts immediately
@@ -194,25 +194,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         gameStatus = 'active';
       } else if (gameMode === 'random') {
         // Check for available player in queue
-        const availableMatch = matchmakingQueue.find(q => q.oderId !== oderId);
-        
+        const availableMatch = matchmakingQueue.find(q => q.userId !== userId);
+
         if (availableMatch) {
           // Found a match - join their game
           const existingGame = gameStore.getGame(availableMatch.gameId);
           if (existingGame && existingGame.status === 'waiting') {
-            existingGame.player2Id = oderId;
+            existingGame.player2Id = userId;
             existingGame.status = 'active';
             existingGame.startedAt = new Date();
             existingGame.currentTurn = existingGame.player1Id;
             gameStore.updateGame(existingGame.id, existingGame);
-            
+
             // Remove from queue
             const idx = matchmakingQueue.indexOf(availableMatch);
             if (idx > -1) matchmakingQueue.splice(idx, 1);
-            
+
             // Notify the waiting player via WebSocket
             wss.clients.forEach((client: WSClient) => {
-              if ((client as any).userId === availableMatch.oderId && client.readyState === WebSocket.OPEN) {
+              if ((client as any).userId === availableMatch.userId && client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
                   type: 'match_found',
                   gameId: existingGame.id,
@@ -220,11 +220,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }));
               }
             });
-            
+
             return res.json(existingGame);
           }
         }
-        
+
         // No match found, create new game and wait
         player2Id = undefined;
         gameStatus = 'waiting';
@@ -232,9 +232,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         player2Id = friendId;
         gameStatus = 'waiting';
       }
-      
+
       const game = gameStore.createGame({
-        player1Id: oderId,
+        player1Id: userId,
         player2Id,
         gameMode,
         difficulty: difficulty || 'standard',
@@ -244,8 +244,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add to matchmaking queue for random mode
       if (gameMode === 'random') {
         matchmakingQueue.push({
-          oderId: oderId,
-          oderofileId: oderId,
+          userId: userId,
+          userProfileId: userId,
           profileName: 'Player',
           gameId: game.id,
           timestamp: new Date(),
@@ -257,7 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userName = req.user.displayName || 'A player';
         const challenge = gameStore.createChallenge({
           gameId: game.id,
-          fromPlayerId: oderId,
+          fromPlayerId: userId,
           toPlayerId: friendId,
           fromPlayerName: userName,
           status: 'pending',
@@ -276,7 +276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
       }
-      
+
       res.json(game);
     } catch (error) {
       console.error("Error creating game:", error);
@@ -301,16 +301,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { challengeId } = req.params;
-      
+
       const challenge = gameStore.getChallenge(challengeId);
       if (!challenge) {
         return res.status(404).json({ message: "Challenge not found" });
       }
-      
+
       if (challenge.toPlayerId !== userId) {
         return res.status(403).json({ message: "Not authorized" });
       }
-      
+
       const game = gameStore.getGame(challenge.gameId);
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
@@ -320,7 +320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       game.player2Id = userId;
       gameStore.updateGame(game.id, game);
       gameStore.updateChallenge(challengeId, { status: 'accepted' });
-      
+
       res.json(game);
     } catch (error) {
       console.error("Error accepting challenge:", error);
@@ -333,12 +333,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { challengeId } = req.params;
-      
+
       const challenge = gameStore.getChallenge(challengeId);
       if (!challenge) {
         return res.status(404).json({ message: "Challenge not found" });
       }
-      
+
       if (challenge.toPlayerId !== userId) {
         return res.status(403).json({ message: "Not authorized" });
       }
@@ -356,7 +356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { code } = req.params;
-      
+
       const game = gameStore.getGameByCode(code);
       if (!game) {
         return res.status(404).json({ message: "Game not found. Invalid code." });
@@ -371,7 +371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       game.startedAt = new Date();
       game.currentTurn = game.player1Id;
       gameStore.updateGame(game.id, game);
-      
+
       res.json(game);
     } catch (error) {
       console.error("Error joining game:", error);
@@ -395,7 +395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { friendId, friendName, friendEmail } = req.body;
-      
+
       const friend = gameStore.addFriend(userId, friendId, friendName, friendEmail);
       res.json(friend);
     } catch (error) {
@@ -408,7 +408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { friendId } = req.params;
-      
+
       gameStore.acceptFriend(userId, friendId);
       res.json({ success: true });
     } catch (error) {
@@ -422,7 +422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       let profile = await gameStore.getProfile(userId);
-      
+
       if (!profile) {
         profile = await gameStore.getOrCreateProfile(userId, {
           name: req.user.displayName || 'Player',
@@ -430,7 +430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           avatar: req.user.photo,
         });
       }
-      
+
       res.json(profile);
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -442,11 +442,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { userId } = req.params;
       const profile = await gameStore.getProfile(userId);
-      
+
       if (!profile) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       res.json(profile);
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -458,7 +458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { bio, avatar } = req.body;
-      
+
       let profile = await gameStore.getProfile(userId);
       if (!profile) {
         profile = await gameStore.getOrCreateProfile(userId, {
@@ -466,7 +466,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: req.user.claims.email,
         });
       }
-      
+
       profile = await gameStore.updateProfile(userId, { bio, avatar });
       res.json(profile);
     } catch (error) {
@@ -494,8 +494,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!q || q.length < 2) {
         return res.json([]);
       }
-      
-      const results = gameStore.searchUsers(q);
+
+      const results = await gameStore.searchUsers(q as string);
       res.json(results);
     } catch (error) {
       console.error("Error searching users:", error);
@@ -519,7 +519,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { notificationId } = req.params;
-      
+
       gameStore.markNotificationRead(userId, notificationId);
       res.json({ success: true });
     } catch (error) {
@@ -532,11 +532,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { gameId } = req.params;
       const game = gameStore.getGame(gameId);
-      
+
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
-      
+
       res.json(game);
     } catch (error) {
       console.error("Error fetching game:", error);
@@ -549,17 +549,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { gameId } = req.params;
       const { secretNumber } = req.body;
-      
+
       const validation = GameEngine.validateNumber(secretNumber);
       if (!validation.isValid) {
         return res.status(400).json({ message: validation.error });
       }
-      
+
       const game = gameStore.getGame(gameId);
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
-      
+
       // Allow both player1 and player2 to set their secret
       if (game.player1Id === userId) {
         game.player1Secret = secretNumber;
@@ -576,7 +576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         game.status = 'active';
         game.startedAt = new Date();
         game.currentTurn = game.player1Id;
-      } 
+      }
       // For random opponent mode, start when first player sets secret (AI will replace if opponent joins)
       else if (game.gameMode === 'random' && game.player1Id === userId && !game.player2Secret) {
         game.player2Id = 'AI';
@@ -591,7 +591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         game.startedAt = new Date();
         game.currentTurn = game.player1Id;
       }
-      
+
       gameStore.updateGame(gameId, game);
       res.json(game);
     } catch (error) {
@@ -605,35 +605,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { gameId } = req.params;
       const { guess } = req.body;
-      
+
       const validation = GameEngine.validateNumber(guess);
       if (!validation.isValid) {
         return res.status(400).json({ message: validation.error });
       }
-      
+
       const game = gameStore.getGame(gameId);
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
-      
+
       if (game.status !== 'active') {
         return res.status(400).json({ message: "Game not active" });
       }
-      
+
       if (game.currentTurn !== userId) {
         return res.status(400).json({ message: "Not your turn" });
       }
-      
+
       // Verify both secrets exist
       if (!game.player1Secret || !game.player2Secret) {
         return res.status(400).json({ message: "Both players must set their secrets first" });
       }
-      
+
       const opponentSecret = game.player1Id === userId ? game.player2Secret : game.player1Secret;
-      
+
       const feedback = GameEngine.calculateFeedback(guess, opponentSecret);
       const isWin = GameEngine.checkWinCondition(guess, opponentSecret);
-      
+
       const move = gameStore.addMove(gameId, {
         gameId,
         playerId: userId,
@@ -642,16 +642,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         correctPositions: feedback.correctPositions,
         moveNumber: game.moves.filter(m => m.playerId === userId).length + 1,
       });
-      
+
       if (isWin) {
         game.status = 'finished';
         game.winnerId = userId;
         game.endedAt = new Date();
         gameStore.updateGame(gameId, game);
-        
+
         // Update stats for winner
         await gameStore.updateStats(userId, gameId);
-        
+
         // Update stats for opponent (if human)
         const opponentId = game.player1Id === userId ? game.player2Id : game.player1Id;
         if (opponentId && opponentId !== 'AI') {
@@ -661,21 +661,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         game.currentTurn = game.player1Id === userId ? game.player2Id : game.player1Id;
         gameStore.updateGame(gameId, game);
       }
-      
+
       // AI move after delay
       if ((game.gameMode === 'ai' || game.gameMode === 'random') && game.player2Id === 'AI' && !isWin) {
         setTimeout(async () => {
           try {
             const updatedGame = gameStore.getGame(gameId);
             if (!updatedGame || updatedGame.status !== 'active') return;
-            
+
             const aiGuess = GameEngine.generateAIGuess('standard');
             const aiValidation = GameEngine.validateNumber(aiGuess);
-            
+
             if (aiValidation.isValid && updatedGame.player1Secret) {
               const aiFeedback = GameEngine.calculateFeedback(aiGuess, updatedGame.player1Secret);
               const aiWins = GameEngine.checkWinCondition(aiGuess, updatedGame.player1Secret);
-              
+
               gameStore.addMove(gameId, {
                 gameId,
                 playerId: 'AI',
@@ -684,13 +684,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 correctPositions: aiFeedback.correctPositions,
                 moveNumber: updatedGame.moves.filter(m => m.playerId === 'AI').length + 1,
               });
-              
+
               if (aiWins) {
                 updatedGame.status = 'finished';
                 updatedGame.winnerId = 'AI';
                 updatedGame.endedAt = new Date();
                 gameStore.updateGame(gameId, updatedGame);
-                
+
                 // Update stats for human player who lost to AI
                 await gameStore.updateStats(updatedGame.player1Id, gameId);
               } else {
@@ -703,7 +703,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }, 1500);
       }
-      
+
       res.json({ move, feedback, isWin });
     } catch (error) {
       console.error("Error making move:", error);
@@ -712,27 +712,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
-  
+
   // WebSocket server for real-time gameplay
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-  
+
   wss.on('connection', (ws: WSClient) => {
     console.log('WebSocket client connected');
-    
+
     ws.on('message', async (message: string) => {
       try {
         const data = JSON.parse(message);
-        
+
         switch (data.type) {
+          case 'identify':
+            // Store userId for this connection globally
+            ws.userId = data.userId;
+            console.log(`✅ WebSocket identified: userId=${data.userId}`);
+            break;
+
           case 'join_game':
             ws.userId = data.userId;
             ws.gameId = data.gameId;
-            
+
             // Notify other players in the game
             wss.clients.forEach((client: WSClient) => {
-              if (client !== ws && 
-                  client.gameId === data.gameId && 
-                  client.readyState === WebSocket.OPEN) {
+              if (client !== ws &&
+                client.gameId === data.gameId &&
+                client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
                   type: 'player_joined',
                   userId: data.userId,
@@ -740,13 +746,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             });
             break;
-            
+
           case 'game_move':
             // Broadcast move to opponent
             wss.clients.forEach((client: WSClient) => {
-              if (client !== ws && 
-                  client.gameId === ws.gameId && 
-                  client.readyState === WebSocket.OPEN) {
+              if (client !== ws &&
+                client.gameId === ws.gameId &&
+                client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
                   type: 'opponent_move',
                   move: data.move,
@@ -755,13 +761,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             });
             break;
-            
+
           case 'game_update':
             // Broadcast game state updates
             wss.clients.forEach((client: WSClient) => {
-              if (client !== ws && 
-                  client.gameId === ws.gameId && 
-                  client.readyState === WebSocket.OPEN) {
+              if (client !== ws &&
+                client.gameId === ws.gameId &&
+                client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
                   type: 'game_state_update',
                   gameState: data.gameState,
@@ -774,7 +780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('WebSocket message error:', error);
       }
     });
-    
+
     ws.on('close', () => {
       console.log('WebSocket client disconnected');
     });

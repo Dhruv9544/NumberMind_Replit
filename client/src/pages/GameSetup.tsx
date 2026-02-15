@@ -188,7 +188,7 @@ export default function GameSetup() {
             
             {/* Number Pad */}
             <NumberPad
-              onDigitClick={inputDigit}
+              onDigitClick={(digit) => inputDigit(digit.toString())}
               onClear={clearInput}
               onRandom={randomNumber}
               showRandom

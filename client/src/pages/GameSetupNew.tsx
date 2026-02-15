@@ -18,6 +18,7 @@ export default function GameSetup() {
   const [showFriendPicker, setShowFriendPicker] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [gameId, setGameId] = useState<string | null>(null);
 
   const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot } = useNumberInput();
 
@@ -26,7 +27,7 @@ export default function GameSetup() {
     enabled: searchQuery.length >= 2 && gameMode === 'friend' && showFriendPicker,
     queryFn: async () => {
       if (searchQuery.length < 2) return [];
-      const response = await apiRequest('GET', `/api/search/users?q=${encodeURIComponent(searchQuery)}`, {});
+      const response = await apiRequest('GET', `/api/search/users?q=${encodeURIComponent(searchQuery)}`);
       return response.json();
     },
   });
@@ -34,7 +35,9 @@ export default function GameSetup() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
+    const id = params.get('gameId');
     if (mode) setGameMode(mode);
+    if (id) setGameId(id);
   }, []);
 
   const createGameMutation = useMutation({
@@ -100,6 +103,22 @@ export default function GameSetup() {
   });
 
   const handleStart = () => {
+    if (gameMode === 'join' && gameId) {
+      if (!isComplete()) {
+        toast({
+          title: 'Invalid Number',
+          description: 'Please enter a complete 4-digit number',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setSecretMutation.mutate({
+        gameId,
+        secretNumber: getValue(),
+      });
+      return;
+    }
+
     if (gameMode === 'friend' && !selectedFriend) {
       toast({
         title: 'Select a Player',
@@ -128,6 +147,8 @@ export default function GameSetup() {
         return { icon: Users, name: 'Challenge Friend', color: 'from-blue-600 to-cyan-600' };
       case 'random':
         return { icon: Globe, name: 'Random Opponent', color: 'from-cyan-600 to-teal-600' };
+      case 'join':
+        return { icon: Zap, name: 'Join Game', color: 'from-green-600 to-emerald-600' };
       default:
         return { icon: Zap, name: 'Game', color: 'from-purple-600 to-blue-600' };
     }
@@ -196,7 +217,7 @@ export default function GameSetup() {
                     </div>
                     <div>
                       <p className="text-green-400 font-bold">Correct Position</p>
-                      <p className="text-green-300 text-xs">Right digit in the right spot</p>
+                      <p className="text-green-300 text-xs">Digit is correct AND in the right spot</p>
                     </div>
                   </div>
 
@@ -205,8 +226,8 @@ export default function GameSetup() {
                       ◆
                     </div>
                     <div>
-                      <p className="text-yellow-400 font-bold">Correct Digit</p>
-                      <p className="text-yellow-300 text-xs">Right digit, wrong position</p>
+                      <p className="text-yellow-400 font-bold">Correct Numbers</p>
+                      <p className="text-yellow-300 text-xs">Total count of digits that are correct</p>
                     </div>
                   </div>
                 </div>
@@ -223,11 +244,11 @@ export default function GameSetup() {
                     </div>
                     <div className="flex gap-2">
                       <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded text-sm font-bold">✓2</span>
-                      <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded text-sm font-bold">◆1</span>
+                      <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded text-sm font-bold">◆3</span>
                     </div>
                   </div>
                   <p className="text-purple-300 text-xs mt-2">
-                    2 digits are in the correct position, 1 more digit exists but in wrong position
+                    2 digits are in the correct position. Total 3 digits are correct (so 1 is in the wrong position).
                   </p>
                 </div>
 
@@ -424,7 +445,10 @@ export default function GameSetup() {
           ) : (
             <>
               <Zap className="w-5 h-5 mr-2" />
-              {gameMode === 'ai' ? 'Start Practice' : gameMode === 'friend' ? 'Send Challenge' : 'Find Opponent'}
+              {gameMode === 'ai' ? 'Start Practice' : 
+               gameMode === 'friend' ? 'Send Challenge' : 
+               gameMode === 'join' ? 'Join Game' :
+               'Find Opponent'}
             </>
           )}
         </Button>

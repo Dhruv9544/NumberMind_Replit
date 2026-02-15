@@ -7,7 +7,7 @@ export function Navbar() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: user } = useQuery({
+  const { data: user } = useQuery<{ id: string; email: string; firstName?: string; lastName?: string }>({
     queryKey: ['/api/auth/user'],
     retry: false,
   });

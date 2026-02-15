@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useWebSocketContext } from '@/context/WebSocketContext';
 
 interface WebSocketMessage {
   type: string;
@@ -6,51 +7,36 @@ interface WebSocketMessage {
 }
 
 export function useWebSocket(gameId?: string, userId?: string) {
-  const [isConnected, setIsConnected] = useState(false);
+  const { isConnected, lastMessage: globalLastMessage, sendMessage: globalSendMessage } = useWebSocketContext();
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!gameId || !userId) return;
+    if (!gameId || !userId || !isConnected) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    const socket = new WebSocket(wsUrl);
-    wsRef.current = socket;
+    // Join this specific game room
+    globalSendMessage({
+      type: 'join_game',
+      gameId,
+      userId,
+    });
+  }, [gameId, userId, isConnected, globalSendMessage]);
 
-    socket.onopen = () => {
-      setIsConnected(true);
-      socket.send(JSON.stringify({
-        type: 'join_game',
-        gameId,
-        userId,
-      }));
-    };
-
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      setLastMessage(message);
-    };
-
-    socket.onclose = () => {
-      setIsConnected(false);
-    };
-
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsConnected(false);
-    };
-
-    return () => {
-      socket.close();
-    };
-  }, [gameId, userId]);
+  // Filter messages for this specific game
+  useEffect(() => {
+    if (globalLastMessage && gameId) {
+      // Only forward game-specific messages
+      if (
+        globalLastMessage.type === 'player_joined' ||
+        globalLastMessage.type === 'opponent_move' ||
+        globalLastMessage.type === 'game_state_update'
+      ) {
+        setLastMessage(globalLastMessage);
+      }
+    }
+  }, [globalLastMessage, gameId]);
 
   const sendMessage = (message: WebSocketMessage) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
-    }
+    globalSendMessage(message);
   };
 
   return {
