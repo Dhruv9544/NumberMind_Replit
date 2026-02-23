@@ -98,8 +98,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/auth/logout', (req: any, res) => {
-    req.session!.userId = undefined;
-    res.json({ success: true });
+    req.session.destroy((err: any) => {
+      if (err) {
+        console.error("Session destroy error:", err);
+        return res.status(500).json({ message: "Failed to logout" });
+      }
+      res.clearCookie('connect.sid');
+      res.json({ success: true });
+    });
   });
 
   app.get('/api/auth/user', requireAuth, async (req: any, res) => {
@@ -146,34 +152,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { username } = req.body;
 
-      if (!username || username.length < 3) {
-        return res.status(400).json({ message: "Username must be at least 3 characters" });
+      // --- Validation ---
+      if (!username || typeof username !== 'string') {
+        return res.status(400).json({ message: "Username is required" });
       }
 
-      // Check if username already taken
-      const existing = await gameStore.searchUsers(username);
-      if (existing.some((u: any) => u.id !== userId)) {
-        return res.status(400).json({ message: "Username already taken" });
+      const trimmed = username.trim();
+
+      if (trimmed.length < 3 || trimmed.length > 20) {
+        return res.status(400).json({ message: "Username must be 3–20 characters" });
       }
 
-      let profile = await gameStore.getProfile(userId);
-      if (!profile) {
-        profile = await gameStore.getOrCreateProfile(userId, {
-          name: req.user.displayName || 'Player',
-          email: req.user.email,
-          avatar: req.user.photo,
-        });
+      if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+        return res.status(400).json({ message: "Username can only contain letters, numbers, and underscores" });
       }
 
-      profile.username = username;
-      await gameStore.updateProfile(userId, profile);
+      // --- Uniqueness check (exact, case-insensitive) ---
+      const existing = await storage.getUserByUsername(trimmed);
+      if (existing && existing.id !== userId) {
+        return res.status(409).json({ message: `@${trimmed} is already taken. Please choose a different username.` });
+      }
 
-      res.json({ success: true, username });
+      // --- Save directly to users table ---
+      await storage.setUsername(userId, trimmed);
+
+      // Keep in-memory profile cache in sync if it's loaded
+      const cachedProfile = await gameStore.getProfile(userId).catch(() => null);
+      if (cachedProfile) {
+        cachedProfile.username = trimmed;
+      }
+
+      res.json({ success: true, username: trimmed });
     } catch (error) {
       console.error("Error setting username:", error);
-      res.status(500).json({ message: "Failed to set username" });
+      res.status(500).json({ message: "Failed to set username. Please try again." });
     }
   });
+
 
   // Matchmaking queue for random opponents
   const matchmakingQueue: { userId: string; userProfileId: string; profileName: string; gameId: string; timestamp: Date }[] = [];
@@ -198,13 +213,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (availableMatch) {
           // Found a match - join their game
-          const existingGame = gameStore.getGame(availableMatch.gameId);
+          const existingGame = await gameStore.getGame(availableMatch.gameId);
           if (existingGame && existingGame.status === 'waiting') {
             existingGame.player2Id = userId;
             existingGame.status = 'active';
             existingGame.startedAt = new Date();
             existingGame.currentTurn = existingGame.player1Id;
-            gameStore.updateGame(existingGame.id, existingGame);
+            await gameStore.updateGame(existingGame.id, existingGame);
 
             // Remove from queue
             const idx = matchmakingQueue.indexOf(availableMatch);
@@ -233,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         gameStatus = 'waiting';
       }
 
-      const game = gameStore.createGame({
+      const game = await gameStore.createGame({
         player1Id: userId,
         player2Id,
         gameMode,
@@ -255,7 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create challenge for friend mode
       if (gameMode === 'friend' && friendId && friendName) {
         const userName = req.user.displayName || 'A player';
-        const challenge = gameStore.createChallenge({
+        const challenge = await gameStore.createChallenge({
           gameId: game.id,
           fromPlayerId: userId,
           toPlayerId: friendId,
@@ -288,7 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/challenges", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const challenges = gameStore.getPendingChallengesForUser(userId);
+      const challenges = await gameStore.getPendingChallengesForUser(userId);
       res.json(challenges);
     } catch (error) {
       console.error("Error fetching challenges:", error);
@@ -302,7 +317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { challengeId } = req.params;
 
-      const challenge = gameStore.getChallenge(challengeId);
+      const challenge = await gameStore.getChallenge(challengeId);
       if (!challenge) {
         return res.status(404).json({ message: "Challenge not found" });
       }
@@ -311,15 +326,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Not authorized" });
       }
 
-      const game = gameStore.getGame(challenge.gameId);
+      const game = await gameStore.getGame(challenge.gameId);
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
 
       // Set player2 as the accepting player
       game.player2Id = userId;
-      gameStore.updateGame(game.id, game);
-      gameStore.updateChallenge(challengeId, { status: 'accepted' });
+      await gameStore.updateGame(game.id, game);
+      await gameStore.updateChallenge(challengeId, { status: 'accepted' });
 
       res.json(game);
     } catch (error) {
@@ -334,7 +349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { challengeId } = req.params;
 
-      const challenge = gameStore.getChallenge(challengeId);
+      const challenge = await gameStore.getChallenge(challengeId);
       if (!challenge) {
         return res.status(404).json({ message: "Challenge not found" });
       }
@@ -343,7 +358,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Not authorized" });
       }
 
-      gameStore.updateChallenge(challengeId, { status: 'rejected' });
+      await gameStore.updateChallenge(challengeId, { status: 'rejected' });
       res.json({ success: true });
     } catch (error) {
       console.error("Error rejecting challenge:", error);
@@ -357,7 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { code } = req.params;
 
-      const game = gameStore.getGameByCode(code);
+      const game = await gameStore.getGameByCode(code);
       if (!game) {
         return res.status(404).json({ message: "Game not found. Invalid code." });
       }
@@ -370,7 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       game.status = 'active';
       game.startedAt = new Date();
       game.currentTurn = game.player1Id;
-      gameStore.updateGame(game.id, game);
+      await gameStore.updateGame(game.id, game);
 
       res.json(game);
     } catch (error) {
@@ -383,7 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/friends", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const friends = gameStore.getFriends(userId);
+      const friends = await gameStore.getFriends(userId);
       res.json(friends);
     } catch (error) {
       console.error("Error fetching friends:", error);
@@ -396,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { friendId, friendName, friendEmail } = req.body;
 
-      const friend = gameStore.addFriend(userId, friendId, friendName, friendEmail);
+      const friend = await gameStore.addFriend(userId, friendId, friendName, friendEmail);
       res.json(friend);
     } catch (error) {
       console.error("Error adding friend:", error);
@@ -409,7 +424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { friendId } = req.params;
 
-      gameStore.acceptFriend(userId, friendId);
+      await gameStore.acceptFriend(userId, friendId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error accepting friend:", error);
@@ -454,6 +469,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/profile/:userId/achievements", async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const achievements = await storage.getUserAchievements(userId);
+      res.json(achievements);
+    } catch (error) {
+      console.error("Error fetching achievements:", error);
+      res.status(500).json({ message: "Failed to fetch achievements" });
+    }
+  });
+
   app.patch("/api/profile", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -461,9 +487,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let profile = await gameStore.getProfile(userId);
       if (!profile) {
+        const user = await storage.getUser(userId);
         profile = await gameStore.getOrCreateProfile(userId, {
-          name: `${req.user.claims.given_name || ''} ${req.user.claims.family_name || ''}`.trim(),
-          email: req.user.claims.email,
+          name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Player',
+          email: user?.email as string || '',
+          avatar: user?.profileImageUrl as string,
         });
       }
 
@@ -479,7 +507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/leaderboard", async (req: any, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit || "50"), 100);
-      const leaderboard = gameStore.getLeaderboard(limit);
+      const leaderboard = await gameStore.getLeaderboardFromDB(limit);
       res.json(leaderboard);
     } catch (error) {
       console.error("Error fetching leaderboard:", error);
@@ -487,15 +515,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Search users
-  app.get("/api/search/users", async (req: any, res) => {
+  // Search users by username — simple direct DB lookup
+  app.get("/api/search/users", requireAuth, async (req: any, res) => {
     try {
       const { q } = req.query;
-      if (!q || q.length < 2) {
+      const currentUserId = req.user.id;
+
+      if (!q || (q as string).trim().length < 1) {
         return res.json([]);
       }
 
-      const results = await gameStore.searchUsers(q as string);
+      const query = (q as string).trim().replace(/^@/, ""); // strip leading @
+      const dbUsers = await storage.searchUsers(query);
+
+      // Exclude self and the AI bot, return only safe public fields
+      const results = dbUsers
+        .filter((u) => u.id !== currentUserId && u.id !== "AI" && u.username)
+        .map((u) => ({
+          id: u.id,
+          username: u.username,
+          name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.username,
+          avatar: u.profileImageUrl,
+          email: u.email,
+        }));
+
       res.json(results);
     } catch (error) {
       console.error("Error searching users:", error);
@@ -503,11 +546,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Notifications
-  app.get("/api/notifications", async (req: any, res) => {
+  // Notifications (require authentication)
+  app.get("/api/notifications", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const notifications = gameStore.getNotifications(userId);
+      const notifications = await gameStore.getNotifications(userId);
       res.json(notifications);
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -515,12 +558,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/notifications/:notificationId/read", async (req: any, res) => {
+  app.post("/api/notifications/:notificationId/read", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { notificationId } = req.params;
 
-      gameStore.markNotificationRead(userId, notificationId);
+      await gameStore.markNotificationRead(userId, notificationId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking notification read:", error);
@@ -528,13 +571,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/games/:gameId", async (req: any, res) => {
+  // Get game history for a user
+  app.get("/api/games/history", requireAuth, async (req: any, res) => {
     try {
+      const currentUserId = req.user.id;
+      const targetUserId = (req.query.userId as string) || currentUserId;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const games = await storage.getUserGames(targetUserId, limit);
+
+      // Enhance games with opponent info
+      const enhancedGames = await Promise.all(games.map(async (game) => {
+        const opponentId = game.player1Id === targetUserId ? game.player2Id : game.player1Id;
+        let opponentName = "AI Opponent";
+
+        if (opponentId && opponentId !== 'AI') {
+          const opponent = await storage.getUser(opponentId);
+          opponentName = opponent?.username || opponent?.firstName || "Unknown Player";
+        }
+
+        return {
+          ...game,
+          opponentName
+        };
+      }));
+
+      res.json(enhancedGames);
+    } catch (error) {
+      console.error("Error fetching game history:", error);
+      res.status(500).json({ message: "Failed to fetch game history" });
+    }
+  });
+
+  app.get("/api/games/:gameId", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
       const { gameId } = req.params;
-      const game = gameStore.getGame(gameId);
+      const game = await gameStore.getGame(gameId);
 
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
+      }
+
+      // Only allow players in the game to view it
+      if (game.player1Id !== userId && game.player2Id !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
       }
 
       res.json(game);
@@ -544,7 +624,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/games/:gameId/secret", async (req: any, res) => {
+  app.put("/api/games/:gameId/secret", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { gameId } = req.params;
@@ -555,7 +635,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: validation.error });
       }
 
-      const game = gameStore.getGame(gameId);
+      const game = await gameStore.getGame(gameId);
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
@@ -592,7 +672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         game.currentTurn = game.player1Id;
       }
 
-      gameStore.updateGame(gameId, game);
+      await gameStore.updateGame(gameId, game);
       res.json(game);
     } catch (error) {
       console.error("Error setting secret:", error);
@@ -600,7 +680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/games/:gameId/moves", async (req: any, res) => {
+  app.post("/api/games/:gameId/moves", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { gameId } = req.params;
@@ -611,7 +691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: validation.error });
       }
 
-      const game = gameStore.getGame(gameId);
+      const game = await gameStore.getGame(gameId);
       if (!game) {
         return res.status(404).json({ message: "Game not found" });
       }
@@ -634,7 +714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const feedback = GameEngine.calculateFeedback(guess, opponentSecret);
       const isWin = GameEngine.checkWinCondition(guess, opponentSecret);
 
-      const move = gameStore.addMove(gameId, {
+      const move = await gameStore.addMove(gameId, {
         gameId,
         playerId: userId,
         guess,
@@ -647,26 +727,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         game.status = 'finished';
         game.winnerId = userId;
         game.endedAt = new Date();
-        gameStore.updateGame(gameId, game);
+        await gameStore.updateGame(gameId, game);
 
-        // Update stats for winner
+        // Ensure profile is loaded before updating stats
+        await gameStore.getOrCreateProfile(userId, { name: 'Player', email: '', avatar: '' });
         await gameStore.updateStats(userId, gameId);
 
         // Update stats for opponent (if human)
         const opponentId = game.player1Id === userId ? game.player2Id : game.player1Id;
         if (opponentId && opponentId !== 'AI') {
+          await gameStore.getOrCreateProfile(opponentId, { name: 'Player', email: '', avatar: '' });
           await gameStore.updateStats(opponentId, gameId);
         }
       } else {
         game.currentTurn = game.player1Id === userId ? game.player2Id : game.player1Id;
-        gameStore.updateGame(gameId, game);
+        await gameStore.updateGame(gameId, game);
       }
 
       // AI move after delay
       if ((game.gameMode === 'ai' || game.gameMode === 'random') && game.player2Id === 'AI' && !isWin) {
         setTimeout(async () => {
           try {
-            const updatedGame = gameStore.getGame(gameId);
+            const updatedGame = await gameStore.getGame(gameId);
             if (!updatedGame || updatedGame.status !== 'active') return;
 
             const aiGuess = GameEngine.generateAIGuess('standard');
@@ -676,7 +758,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const aiFeedback = GameEngine.calculateFeedback(aiGuess, updatedGame.player1Secret);
               const aiWins = GameEngine.checkWinCondition(aiGuess, updatedGame.player1Secret);
 
-              gameStore.addMove(gameId, {
+              await gameStore.addMove(gameId, {
                 gameId,
                 playerId: 'AI',
                 guess: aiGuess,
@@ -689,13 +771,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 updatedGame.status = 'finished';
                 updatedGame.winnerId = 'AI';
                 updatedGame.endedAt = new Date();
-                gameStore.updateGame(gameId, updatedGame);
+                await gameStore.updateGame(gameId, updatedGame);
 
-                // Update stats for human player who lost to AI
+                // Ensure profile is loaded before updating stats
+                await gameStore.getOrCreateProfile(updatedGame.player1Id, { name: 'Player', email: '', avatar: '' });
                 await gameStore.updateStats(updatedGame.player1Id, gameId);
               } else {
                 updatedGame.currentTurn = updatedGame.player1Id;
-                gameStore.updateGame(gameId, updatedGame);
+                await gameStore.updateGame(gameId, updatedGame);
               }
             }
           } catch (error) {

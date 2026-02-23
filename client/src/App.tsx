@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navbar } from "@/components/Navbar";
+import { GameLoader } from "@/components/GameLoader";
 import { WebSocketProvider } from "@/context/WebSocketContext";
 import AuthPage from "@/pages/AuthPage";
 import UsernameSetupPage from "@/pages/UsernameSetupPage";
@@ -18,6 +19,7 @@ import Challenges from "@/pages/Challenges";
 import Leaderboard from "@/pages/Leaderboard";
 import Profile from "@/pages/Profile";
 import Notifications from "@/pages/Notifications";
+import HistoryPage from "@/pages/History";
 
 function Router() {
   const [location, setLocation] = useLocation();
@@ -41,9 +43,9 @@ function Router() {
     }
   }, [user, isLoading, location, setLocation]);
 
-  // Show loading state
+  // Show custom game loader
   if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return <GameLoader fullScreen text="Verifying Clearance..." />;
   }
 
   // If not authenticated, show auth page
@@ -70,6 +72,7 @@ function Router() {
       <Route path="/profile/:userId" component={Profile} />
       <Route path="/profile" component={Profile} />
       <Route path="/notifications" component={Notifications} />
+      <Route path="/history" component={HistoryPage} />
       <Route path="/game/setup" component={GameSetup} />
       <Route path="/game/play/:gameId" component={GamePlay} />
       <Route path="/game/result/:gameId" component={GameResult} />

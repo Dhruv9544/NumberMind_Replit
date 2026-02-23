@@ -1,5 +1,5 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import ws from "ws";
 import * as schema from "@shared/schema";
 
@@ -11,13 +11,23 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-console.log("DATABASE_URL set:", process.env.DATABASE_URL.substring(0, 50) + "...");
-console.log("Initializing PostgreSQL connection pool...");
+// Only log DB initialization in development
+if (process.env.NODE_ENV !== "production") {
+  console.log("Initializing PostgreSQL connection pool...");
+}
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10,              // Max connections in pool
+  idleTimeoutMillis: 30000,  // Close idle connections after 30s
+  connectionTimeoutMillis: 5000, // Fail fast if DB is unreachable
+});
+
 export const db = drizzle({ client: pool, schema });
 
-console.log("✅ PostgreSQL connection pool created successfully");
+if (process.env.NODE_ENV !== "production") {
+  console.log("✅ PostgreSQL connection pool created successfully");
+}
 
 // Export migration runner
 export { runMigrations } from "./migrations";

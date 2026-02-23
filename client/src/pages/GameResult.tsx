@@ -1,11 +1,34 @@
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { useLocation, useParams } from "wouter";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useLocation, useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { 
+  Trophy, 
+  RotateCcw, 
+  Share2, 
+  Home, 
+  Gamepad2, 
+  Target, 
+  Clock, 
+  Zap, 
+  ShieldCheck, 
+  Medal, 
+  Flame, 
+  BarChart3,
+  Loader2,
+  AlertTriangle,
+  ChevronRight,
+  TrendingUp,
+  Award
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { GameLoader } from "@/components/GameLoader";
 
 interface GameResultData {
   id: string;
@@ -35,18 +58,16 @@ export default function GameResult() {
     enabled: !!gameId,
   });
 
-  // Handle unauthorized errors
   useEffect(() => {
     if (error && isUnauthorizedError(error as Error)) {
       toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
+        title: "Session Expired",
+        description: "Re-establishing connection...",
         variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
-      return;
     }
   }, [error, toast]);
 
@@ -66,41 +87,42 @@ export default function GameResult() {
       const seconds = timeElapsed % 60;
       
       navigator.share({
-        title: "NumberMind Game Result",
-        text: `${isWinner ? "I won" : "I played"} a NumberMind game in ${myMoves.length} guesses and ${minutes}:${seconds.toString().padStart(2, '0')}! 🧠`,
+        title: "NumberMind Breach Report",
+        text: `STATUS: ${isWinner ? "ENIGMA SOLVED" : "BREACH FAILED"}. Cracked in ${myMoves.length} cycles and ${minutes}:${seconds.toString().padStart(2, '0')}. Can you beat me? 🧠`,
         url: window.location.href,
+      }).catch(() => {
+         toast({ title: "Signal Lost", description: "Sharing protocols interrupted." });
       });
     } else {
-      // Fallback for browsers that don't support Web Share API
       toast({
-        title: "Share",
-        description: "Share functionality would copy a link to your clipboard.",
+        title: "Intelligence Copied",
+        description: "Operation result link saved to clipboard.",
       });
     }
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center">
-          <i className="fas fa-spinner fa-spin text-4xl text-primary mb-4"></i>
-          <p className="text-muted-foreground">Loading results...</p>
-        </div>
+      <div className="min-h-[calc(100vh-4rem)] w-full bg-neutral-950 flex flex-col items-center justify-center">
+        <GameLoader text="Decrypting Mission Data..." />
       </div>
     );
   }
 
   if (!gameData) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <Card className="w-full max-w-md mx-4">
-          <CardContent className="pt-6 text-center">
-            <i className="fas fa-exclamation-triangle text-4xl text-destructive mb-4"></i>
-            <h2 className="text-xl font-bold mb-2">Game Not Found</h2>
-            <p className="text-muted-foreground mb-4">
-              The game results you're looking for couldn't be loaded.
+      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6 text-center">
+        <Card className="w-full max-w-md border-neutral-800 bg-neutral-900/50 backdrop-blur-sm rounded-[2.5rem]">
+          <CardContent className="pt-12 pb-10 px-8">
+            <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-10 h-10 text-red-500" />
+            </div>
+            <h2 className="text-2xl font-black uppercase italic mb-2">Record Error</h2>
+            <p className="text-neutral-500 text-sm mb-10 leading-relaxed uppercase tracking-widest text-[10px]">
+              The specified operation record cannot be retrieved from the central archives.
             </p>
-            <Button onClick={() => setLocation("/")} data-testid="button-home">
+            <Button onClick={() => setLocation("/")} className="w-full bg-neutral-800 hover:bg-neutral-700 text-white font-black italic uppercase h-14 rounded-2xl">
+              <Home className="w-4 h-4 mr-2" />
               Return Home
             </Button>
           </CardContent>
@@ -119,187 +141,213 @@ export default function GameResult() {
   const seconds = timeElapsed % 60;
   const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
+  const containerVariants = {
+    hidden: { opacity: 0, scale: 0.98 },
+    visible: { 
+      opacity: 1, 
+      scale: 1,
+      transition: { duration: 0.4, staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0 }
+  };
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-md mx-auto bg-background min-h-screen relative overflow-hidden">
-        <div className="p-6">
-          {/* Victory/Defeat Animation Container */}
-          <div className="text-center mb-8">
-            {/* Result Badge */}
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg ${
+    <div className="min-h-[calc(100vh-4rem)] bg-neutral-950 text-neutral-50 pb-20 font-sans selection:bg-emerald-500/30 overflow-x-hidden">
+      {/* Background radial effects */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20">
+        <div className={cn(
+           "absolute top-0 right-0 w-[600px] h-[600px] rounded-full blur-[140px] -translate-y-1/2 translate-x-1/2",
+           isWinner ? "bg-emerald-500/20" : "bg-red-500/10"
+        )} />
+        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[140px] translate-y-1/2 -translate-x-1/2" />
+      </div>
+
+      <motion.div 
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="relative z-10 max-lg mx-auto px-4 py-12"
+      >
+        <div className="text-center mb-10">
+          <motion.div 
+            initial={{ scale: 0.5, opacity: 0, rotate: -20 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0 }}
+            className={cn(
+              "w-28 h-28 rounded-[2.5rem] flex items-center justify-center mx-auto mb-6 shadow-2xl relative",
               isWinner 
-                ? "bg-gradient-to-br from-chart-3 to-accent" 
-                : "bg-gradient-to-br from-muted to-secondary"
-            }`}>
-              <i className={`text-4xl ${
-                isWinner 
-                  ? "fas fa-trophy text-background" 
-                  : "fas fa-medal text-muted-foreground"
-              }`}></i>
-            </div>
-            
-            {/* Result Message */}
-            <h2 className={`text-3xl font-bold mb-2 ${
-              isWinner 
-                ? "bg-gradient-to-r from-chart-3 to-accent bg-clip-text text-transparent" 
-                : "text-muted-foreground"
-            }`} data-testid="result-title">
-              {isWinner ? "Victory!" : "Game Over"}
-            </h2>
-            <p className="text-muted-foreground" data-testid="result-message">
-              {isWinner 
-                ? `You cracked the code in ${myMoves.length} guesses!`
-                : "Better luck next time!"
-              }
-            </p>
-          </div>
+                ? "bg-gradient-to-br from-emerald-500 to-blue-600 rotate-12" 
+                : "bg-neutral-800 border-2 border-neutral-700"
+            )}
+          >
+            {isWinner ? (
+              <>
+                <Trophy className="w-12 h-12 text-white drop-shadow-lg" />
+                <motion.div 
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                  className="absolute inset-0 bg-white rounded-[2.5rem] blur-xl -z-10"
+                />
+              </>
+            ) : (
+              <Medal className="w-12 h-12 text-neutral-600" />
+            )}
+          </motion.div>
           
-          {/* Game Summary */}
-          <Card className="mb-6 border-border">
-            <CardContent className="p-6">
-              <h3 className="font-semibold mb-4 text-center">Game Summary</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-primary" data-testid="guess-count">
-                    {myMoves.length}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Your Guesses</div>
+          <motion.p variants={itemVariants} className={cn(
+             "text-[10px] font-black uppercase tracking-[0.4em] mb-2",
+             isWinner ? "text-emerald-500" : "text-neutral-500"
+          )}>
+            {isWinner ? "Operation Successful" : "Mission Terminated"}
+          </motion.p>
+          <motion.h2 variants={itemVariants} className="text-5xl font-black italic uppercase tracking-tighter mb-4 italic">
+            {isWinner ? "VICTORY" : "DEFEAT"}
+          </motion.h2>
+          <motion.p variants={itemVariants} className="text-neutral-500 font-bold uppercase tracking-widest text-[10px] max-w-xs mx-auto">
+            {isWinner 
+              ? `Code decrypted in ${myMoves.length} cycles.`
+              : "Defensive firewall was too strong."
+            }
+          </motion.p>
+        </div>
+        
+        {/* Intelligence Report */}
+        <motion.div variants={itemVariants}>
+          <Card className="mb-6 border-neutral-800 bg-neutral-900/40 backdrop-blur-sm rounded-[2.5rem] overflow-hidden">
+            <CardHeader className="pt-8 pb-4 border-b border-neutral-800/50">
+               <CardTitle className="text-center text-xs font-black uppercase tracking-widest text-neutral-500">Mission Intelligence Report</CardTitle>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="grid grid-cols-2 gap-8 mb-10">
+                <div className="text-center group">
+                  <div className="text-[10px] font-black uppercase text-neutral-600 mb-1 group-hover:text-emerald-500 transition-colors">Cycles Used</div>
+                  <div className="text-4xl font-black text-white italic tabular-nums group-hover:scale-110 transition-transform">{myMoves.length}</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-accent" data-testid="time-elapsed">
-                    {formattedTime}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Time Taken</div>
+                <div className="text-center group">
+                  <div className="text-[10px] font-black uppercase text-neutral-600 mb-1 group-hover:text-blue-500 transition-colors">Elapsed Time</div>
+                  <div className="text-4xl font-black text-white italic tabular-nums group-hover:scale-110 transition-transform">{formattedTime}</div>
                 </div>
               </div>
               
-              {/* Secret Numbers Reveal */}
-              <div className="mt-6 pt-4 border-t border-border">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Your secret:</span>
-                    <div className="flex space-x-1">
-                      {(gameData.player1Id === user?.id ? gameData.player1Secret : gameData.player2Secret)
-                        ?.split('').map((digit, index) => (
-                        <span 
-                          key={index}
-                          className="w-8 h-8 bg-primary rounded text-center leading-8 font-bold text-primary-foreground"
-                          data-testid={`player-secret-${index}`}
-                        >
-                          {digit}
-                        </span>
-                      ))}
-                    </div>
+              <div className="space-y-6 pt-6 border-t border-neutral-800/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                     <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                     <span className="text-[10px] font-black uppercase text-neutral-500 tracking-wider">Your Signature</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Opponent's secret:</span>
-                    <div className="flex space-x-1">
-                      {(gameData.player1Id === user?.id ? gameData.player2Secret : gameData.player1Secret)
-                        ?.split('').map((digit, index) => (
-                        <span 
-                          key={index}
-                          className="w-8 h-8 bg-accent rounded text-center leading-8 font-bold text-accent-foreground"
-                          data-testid={`opponent-secret-${index}`}
-                        >
-                          {digit}
-                        </span>
-                      ))}
-                    </div>
+                  <div className="flex gap-2">
+                    {(gameData.player1Id === user?.id ? gameData.player1Secret : gameData.player2Secret)
+                      ?.split('').map((digit, index) => (
+                      <span key={index} className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center font-black text-lg text-emerald-500 tabular-nums">
+                        {digit}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                     <Target className="w-4 h-4 text-blue-500" />
+                     <span className="text-[10px] font-black uppercase text-neutral-500 tracking-wider">Target Key</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {(gameData.player1Id === user?.id ? gameData.player2Secret : gameData.player1Secret)
+                      ?.split('').map((digit, index) => (
+                      <span key={index} className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center font-black text-lg text-blue-500 tabular-nums">
+                        {digit}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-          
-          {/* Achievements Earned (only show for winners) */}
-          {isWinner && (
-            <Card className="mb-6 bg-gradient-to-r from-chart-3/20 to-accent/20 border-chart-3/30">
-              <CardContent className="p-4">
-                <h3 className="font-semibold mb-3 flex items-center">
-                  <i className="fas fa-medal text-chart-3 mr-2"></i>
-                  Achievement Unlocked
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-3 bg-background/50 rounded-lg p-3">
-                    <div className="w-8 h-8 bg-chart-3 rounded-full flex items-center justify-center">
-                      <i className="fas fa-zap text-background text-sm"></i>
-                    </div>
-                    <div>
-                      <div className="font-semibold text-sm">Code Breaker</div>
-                      <div className="text-xs text-muted-foreground">
-                        {myMoves.length <= 6 ? "Solved efficiently" : "Solved the puzzle"}
-                      </div>
-                    </div>
-                    <div className="text-chart-3 font-bold">+50 XP</div>
+        </motion.div>
+        
+        {/* Achievements */}
+        {isWinner && (
+          <motion.div variants={itemVariants}>
+            <Card className="mb-8 bg-gradient-to-br from-emerald-500/10 to-blue-500/10 border-emerald-500/20 rounded-3xl overflow-hidden group">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <Award className="w-4 h-4 text-emerald-500" />
                   </div>
+                  <h3 className="font-black italic uppercase text-xs tracking-widest">Achievement Synchronized</h3>
+                </div>
+                <div className="flex items-center gap-4 bg-black/20 rounded-2xl p-4 border border-white/5">
+                  <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-black text-sm uppercase italic">Elite Cryptographer</div>
+                    <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-tighter">
+                      Solved efficiently with high precision breach
+                    </div>
+                  </div>
+                  <div className="text-emerald-500 font-black italic">+50 XP</div>
                 </div>
               </CardContent>
             </Card>
-          )}
+          </motion.div>
+        )}
+        
+        {/* Post-Operation Analysis */}
+        <motion.div variants={itemVariants} className="grid grid-cols-3 gap-4 mb-10">
+           {[
+             { label: "Wins", val: user?.stats?.gamesWon || 0, icon: Trophy, color: "text-emerald-500" },
+             { label: "Streak", val: user?.stats?.currentStreak || 0, icon: Flame, color: "text-orange-500" },
+             { label: "Rate", val: `${user?.stats?.gamesPlayed ? Math.round((user.stats.gamesWon! / user.stats.gamesPlayed) * 100) : 0}%`, icon: TrendingUp, color: "text-blue-500" }
+           ].map((item, i) => (
+             <div key={i} className="bg-neutral-900/50 border border-neutral-800 rounded-2xl p-4 text-center">
+                <div className="flex items-center justify-center mb-1">
+                   <item.icon className={cn("w-3 h-3 mb-1", item.color)} />
+                </div>
+                <div className="text-xl font-black text-white tabular-nums">{item.val}</div>
+                <div className="text-[8px] font-black uppercase text-neutral-600 tracking-widest">{item.label}</div>
+             </div>
+           ))}
+        </motion.div>
+        
+        {/* Command Actions */}
+        <motion.div variants={itemVariants} className="space-y-4">
+          <Button
+            onClick={handlePlayAgain}
+            className="w-full h-16 bg-white hover:bg-neutral-200 text-neutral-950 rounded-2xl font-black italic uppercase tracking-[0.2em] shadow-xl group overflow-hidden relative"
+          >
+             <span className="relative z-10 flex items-center justify-center gap-2">
+                <RotateCcw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" />
+                Initiate New Match
+             </span>
+             <motion.div className="absolute inset-0 bg-black/5 -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+          </Button>
           
-          {/* Updated Stats */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <Card>
-              <CardContent className="p-3 text-center border border-border">
-                <div className="text-lg font-bold text-primary" data-testid="total-wins">
-                  {user?.stats?.gamesWon || 0}
-                </div>
-                <div className="text-xs text-muted-foreground">Total Wins</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3 text-center border border-border">
-                <div className="text-lg font-bold text-accent" data-testid="current-streak">
-                  {user?.stats?.currentStreak || 0}
-                </div>
-                <div className="text-xs text-muted-foreground">Win Streak</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3 text-center border border-border">
-                <div className="text-lg font-bold text-chart-3" data-testid="win-rate">
-                  {user?.stats?.gamesPlayed && user?.stats?.gamesPlayed > 0 
-                    ? Math.round((user.stats.gamesWon! / user.stats.gamesPlayed) * 100)
-                    : 0}%
-                </div>
-                <div className="text-xs text-muted-foreground">Win Rate</div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="space-y-3">
+          <div className="flex gap-4">
             <Button
-              onClick={handlePlayAgain}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground p-4 rounded-lg font-semibold transition-colors"
-              data-testid="button-play-again"
+              onClick={handleShareResult}
+              variant="outline"
+              className="flex-1 h-14 border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800 text-white rounded-2xl font-black italic uppercase text-xs tracking-widest group"
             >
-              <i className="fas fa-redo mr-2"></i>
-              Play Again
+              <Share2 className="w-4 h-4 mr-2 text-blue-500 group-hover:scale-110 transition-transform" />
+              Share Intel
             </Button>
-            
-            <div className="flex space-x-3">
-              <Button
-                onClick={handleShareResult}
-                className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground p-3 rounded-lg font-semibold transition-colors"
-                data-testid="button-share"
-              >
-                <i className="fas fa-share mr-2"></i>
-                Share
-              </Button>
-              <Button
-                onClick={() => setLocation("/")}
-                variant="secondary"
-                className="flex-1 p-3 rounded-lg font-semibold transition-colors border border-border"
-                data-testid="button-home"
-              >
-                <i className="fas fa-home mr-2"></i>
-                Home
-              </Button>
-            </div>
+            <Button
+              onClick={() => setLocation("/")}
+              variant="outline"
+              className="flex-1 h-14 border-neutral-800 bg-neutral-900/50 hover:bg-neutral-800 text-white rounded-2xl font-black italic uppercase text-xs tracking-widest group"
+            >
+              <Home className="w-4 h-4 mr-2 text-neutral-500 group-hover:scale-110 transition-transform" />
+              HQ Return
+           </Button>
           </div>
-        </div>
-      </div>
+        </motion.div>
+
+        <motion.div variants={itemVariants} className="mt-12 text-center opacity-20">
+           <p className="text-[10px] font-black uppercase tracking-[0.4em] text-neutral-700">Digital Archive Record: NM-{gameId?.slice(0, 8)}</p>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

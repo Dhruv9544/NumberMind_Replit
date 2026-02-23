@@ -68,18 +68,34 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  // In production, static files are built to dist/public by Vite
+  // The server bundle lands in dist/index.js, so we go one level up from __dirname
+  const distPath = path.resolve(import.meta.dirname, "..", "dist", "public");
 
-  if (!fs.existsSync(distPath)) {
+  // Fallback to the legacy location used in some Replit setups
+  const legacyPath = path.resolve(import.meta.dirname, "public");
+
+  const publicPath = fs.existsSync(distPath) ? distPath : legacyPath;
+
+  if (!fs.existsSync(publicPath)) {
     throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
+      `Could not find the build directory at ${distPath} or ${legacyPath}. ` +
+      `Run 'npm run build' first.`,
     );
   }
 
-  app.use(express.static(distPath));
+  // Serve static assets with long-term caching
+  app.use(express.static(publicPath, {
+    maxAge: "1y",
+    etag: true,
+    lastModified: true,
+    index: false, // Don't serve index.html for directory requests — SPA handles routing
+  }));
 
-  // fall through to index.html if the file doesn't exist
+  // SPA fallback — always serve index.html for non-asset routes
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(path.resolve(publicPath, "index.html"));
   });
 }
+

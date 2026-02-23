@@ -1,10 +1,26 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { 
+  ShieldCheck, 
+  Lock, 
+  Mail, 
+  ArrowRight, 
+  Gamepad2, 
+  Loader2, 
+  Eye, 
+  EyeOff,
+  Zap,
+  Target,
+  Bot
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { GameLoader } from "@/components/GameLoader";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
@@ -14,20 +30,18 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  // Client-side validation with real-time feedback
   const validateEmail = (value: string): string | undefined => {
-    if (!value) return "Email is required";
-    if (!value.includes("@") || !value.includes(".")) return "Please enter a valid email address";
+    if (!value) return "Access ID required";
+    if (!value.includes("@") || !value.includes(".")) return "Invalid coordinate format";
     return undefined;
   };
 
   const validatePassword = (value: string): string | undefined => {
-    if (!value) return "Password is required";
-    if (value.length < 6 && !isLogin) return "Password must be at least 6 characters";
-    if (!isLogin && !/[A-Z]/.test(value)) return "Password must contain at least one uppercase letter";
-    if (!isLogin && !/[0-9]/.test(value)) return "Password must contain at least one number";
+    if (!value) return "Security key required";
+    if (value.length < 6 && !isLogin) return "Key must be 6+ characters";
     return undefined;
   };
 
@@ -43,12 +57,7 @@ export default function AuthPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Validate inputs first
-    if (!validateInputs()) {
-      return;
-    }
-
+    if (!validateInputs()) return;
     setLoading(true);
 
     try {
@@ -64,8 +73,8 @@ export default function AuthPage() {
 
       if (!response.ok) {
         toast({
-          title: "Error",
-          description: data.message || "Authentication failed",
+          title: "Access Denied",
+          description: data.message || "Authentication protocols failed",
           variant: "destructive",
         });
         setLoading(false);
@@ -73,29 +82,25 @@ export default function AuthPage() {
       }
 
       toast({
-        title: "Success",
-        description: data.message || (isLogin ? "Logged in successfully" : "Account created successfully"),
+        title: "Access Granted",
+        description: data.message || (isLogin ? "Welcome back, Operator." : "Channel secured. Profile created."),
       });
 
-      // Clear form
       setEmail("");
       setPassword("");
       setErrors({});
 
-      // After signup, switch to login view. After login, redirect to dashboard.
       if (!isLogin) {
-        setIsLogin(true); // Switch to login mode after signup
+        setIsLogin(true);
       } else {
-        // After login, invalidate and refetch auth query, then redirect
         await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         await queryClient.refetchQueries({ queryKey: ['/api/auth/user'] });
-        // Router component will handle redirect based on usernameSet
         setLocation("/"); 
       }
     } catch (error) {
       toast({
-        title: "Error",
-        description: "An error occurred. Please try again.",
+        title: "System Error",
+        description: "Network intercept detected. Review connection.",
         variant: "destructive",
       });
     } finally {
@@ -104,85 +109,168 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl text-center">
-            {isLogin ? "Login" : "Create Account"}
-          </CardTitle>
-          <CardDescription className="text-center">
-            {isLogin
-              ? "Enter your credentials to continue"
-              : "Create an account to play"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setEmail(value);
-                  const error = validateEmail(value);
-                  setErrors({ ...errors, email: error });
-                }}
-                required
-                data-testid="input-email"
-                className={errors.email ? "border-red-500" : ""}
-              />
-              {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
-            </div>
-            <div>
-              <Input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setPassword(value);
-                  const error = validatePassword(value);
-                  setErrors({ ...errors, password: error });
-                }}
-                required
-                data-testid="input-password"
-                className={errors.password ? "border-red-500" : ""}
-              />
-              {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
-              {!isLogin && (
-                <div className="text-gray-500 text-xs mt-2 space-y-1">
-                  <p>Password requirements:</p>
-                  <p className={password.length >= 6 ? "text-green-600" : ""}>✓ At least 6 characters</p>
-                  <p className={/[A-Z]/.test(password) ? "text-green-600" : ""}>✓ One uppercase letter</p>
-                  <p className={/[0-9]/.test(password) ? "text-green-600" : ""}>✓ One number</p>
-                </div>
-              )}
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading}
-              data-testid="button-submit"
-            >
-              {loading ? "Loading..." : isLogin ? "Login" : "Sign Up"}
-            </Button>
-          </form>
+    <div className="min-h-screen w-full bg-neutral-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500/30 overflow-y-auto font-sans">
+      <AnimatePresence>
+         {loading && <GameLoader fullScreen text="Verifying Identity Credentials..." />}
+      </AnimatePresence>
+      {/* Background Ambience */}
+      <div className="fixed inset-0 pointer-events-none opacity-20">
+        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-emerald-500/10 rounded-full blur-[160px] -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-[800px] h-[800px] bg-blue-500/10 rounded-full blur-[160px] translate-y-1/2 -translate-x-1/2" />
+      </div>
 
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-blue-600 hover:underline"
-              data-testid="button-toggle-auth"
-            >
-              {isLogin
-                ? "Don't have an account? Sign up"
-                : "Already have an account? Login"}
-            </button>
-          </div>
-        </CardContent>
-      </Card>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative z-10 w-full max-w-lg"
+      >
+        {/* Branding */}
+        <div className="text-center mb-10 group cursor-default">
+           <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-neutral-900 border border-neutral-800 mb-6 group-hover:border-emerald-500 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.1)] transition-all duration-500">
+              <Gamepad2 className="w-10 h-10 text-emerald-500" />
+           </div>
+           <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-2 italic uppercase">
+              NUMBER<span className="text-emerald-500">MIND</span>
+           </h1>
+           <p className="text-neutral-500 text-xs font-black uppercase tracking-[0.4em]">Access Terminal 01</p>
+        </div>
+
+        <Card className="border-neutral-800 bg-neutral-900/50 backdrop-blur-xl rounded-[2.5rem] overflow-hidden shadow-2xl">
+          <CardHeader className="pt-10 pb-6 px-8 sm:px-12 text-center">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={isLogin ? 'login' : 'signup'}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <CardTitle className="text-2xl font-black italic uppercase italic tracking-tight mb-2">
+                  {isLogin ? "Initiate Session" : "Deploy Operation"}
+                </CardTitle>
+                <CardDescription className="text-neutral-500 font-bold text-xs uppercase tracking-widest leading-relaxed">
+                  {isLogin
+                    ? "Verify clearance level to proceed"
+                    : "Establish new credentials on the network"}
+                </CardDescription>
+              </motion.div>
+            </AnimatePresence>
+          </CardHeader>
+
+          <CardContent className="pb-10 px-8 sm:px-12">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Mail className={cn(
+                      "w-4 h-4 transition-colors",
+                      errors.email ? "text-red-500" : "text-neutral-600 group-focus-within:text-emerald-500"
+                    )} />
+                  </div>
+                  <Input
+                    type="email"
+                    placeholder="EMAIL@MIND.NET"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value.toUpperCase());
+                      setErrors({ ...errors, email: undefined });
+                    }}
+                    required
+                    className={cn(
+                      "h-14 pl-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-xs font-black tracking-widest focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all uppercase placeholder:text-neutral-700",
+                      errors.email && "border-red-500/50 bg-red-500/5"
+                    )}
+                  />
+                </div>
+                {errors.email && (
+                  <motion.p initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-[10px] font-black uppercase text-red-500 pl-4">{errors.email}</motion.p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className={cn(
+                      "w-4 h-4 transition-colors",
+                      errors.password ? "text-red-500" : "text-neutral-600 group-focus-within:text-emerald-500"
+                    )} />
+                  </div>
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="SECURITY KEY"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setErrors({ ...errors, password: undefined });
+                    }}
+                    required
+                    className={cn(
+                      "h-14 pl-12 pr-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-xs font-black tracking-widest focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all placeholder:text-neutral-700",
+                      errors.password && "border-red-500/50 bg-red-500/5"
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-neutral-600 hover:text-white transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {errors.password && (
+                  <motion.p initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-[10px] font-black uppercase text-red-500 pl-4">{errors.password}</motion.p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black italic uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/10 group overflow-hidden relative"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <span className="relative z-10 flex items-center gap-2">
+                       {isLogin ? "Auth Access" : "Configure Account"}
+                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </span>
+                    <motion.div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-8 flex flex-col items-center gap-4">
+              <button
+                onClick={() => setIsLogin(!isLogin)}
+                className="text-xs font-black uppercase tracking-widest text-neutral-500 hover:text-emerald-400 transition-colors"
+              >
+                {isLogin
+                  ? "Lack Authorization? Request Key"
+                  : "Return to Access Terminal"}
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Features teaser (only for mobile/compact view) */}
+        <div className="mt-12 grid grid-cols-3 gap-6">
+           {[
+             { icon: Target, label: "Precision" },
+             { icon: Zap, label: "Efficiency" },
+             { icon: Bot, label: "Tactics" }
+           ].map((feature, i) => (
+             <div key={i} className="flex flex-col items-center gap-2 group">
+                <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center group-hover:border-neutral-700 transition-colors">
+                   <feature.icon className="w-4 h-4 text-neutral-600 group-hover:text-emerald-500/50 transition-colors" />
+                </div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-neutral-700 group-hover:text-neutral-500 transition-colors">{feature.label}</span>
+             </div>
+           ))}
+        </div>
+      </motion.div>
     </div>
   );
 }
+

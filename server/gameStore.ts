@@ -100,12 +100,40 @@ class GameStore {
   }
 
   // Games
-  createGame(game: Omit<StoredGame, 'id' | 'code' | 'createdAt' | 'moves'>): StoredGame {
+  async createGame(game: Omit<StoredGame, 'id' | 'code' | 'createdAt' | 'moves'>): Promise<StoredGame> {
+    const code = this.generateGameCode();
+
+    if (this.storage) {
+      const dbGame = await this.storage.createGame({
+        player1Id: game.player1Id,
+        player2Id: game.player2Id || null,
+        player1Secret: game.player1Secret || null,
+        player2Secret: game.player2Secret || null,
+        currentTurn: game.currentTurn || null,
+        status: game.status,
+        winnerId: game.winnerId || null,
+        gameMode: game.gameMode,
+        difficulty: game.difficulty,
+        startedAt: game.startedAt || null,
+        finishedAt: game.endedAt || null,
+      });
+
+      const storedGame: StoredGame = {
+        ...game,
+        id: dbGame.id,
+        code, // Note: The DB schema doesn't have 'code', we might need to add it or store it in memory for invitation
+        moves: [],
+        createdAt: dbGame.createdAt || new Date(),
+      };
+      this.games.set(dbGame.id, storedGame);
+      return storedGame;
+    }
+
     const id = 'game-' + Math.random().toString(36).substr(2, 9);
     const storedGame: StoredGame = {
       ...game,
       id,
-      code: this.generateGameCode(),
+      code,
       moves: [],
       createdAt: new Date(),
     };
@@ -113,25 +141,100 @@ class GameStore {
     return storedGame;
   }
 
-  getGame(id: string): StoredGame | undefined {
-    return this.games.get(id);
+  async getGame(id: string): Promise<StoredGame | undefined> {
+    if (this.games.has(id)) return this.games.get(id);
+
+    if (this.storage) {
+      const dbGame = await this.storage.getGame(id);
+      if (dbGame) {
+        const moves = await this.storage.getGameMoves(id);
+        const storedGame: StoredGame = {
+          id: dbGame.id,
+          code: '', // Logic to handle code if needed
+          player1Id: dbGame.player1Id,
+          player2Id: dbGame.player2Id || undefined,
+          player1Secret: dbGame.player1Secret || undefined,
+          player2Secret: dbGame.player2Secret || undefined,
+          gameMode: dbGame.gameMode,
+          difficulty: dbGame.difficulty || 'standard',
+          status: dbGame.status as any,
+          currentTurn: dbGame.currentTurn || undefined,
+          winnerId: dbGame.winnerId || undefined,
+          moves: moves.map(m => ({
+            id: m.id,
+            gameId: m.gameId,
+            playerId: m.playerId,
+            guess: m.guess,
+            correctDigits: m.correctDigits,
+            correctPositions: m.correctPositions,
+            moveNumber: m.moveNumber,
+            createdAt: m.createdAt || new Date(),
+          })),
+          createdAt: dbGame.createdAt || new Date(),
+          startedAt: dbGame.startedAt || undefined,
+          endedAt: dbGame.finishedAt || undefined,
+        };
+        this.games.set(id, storedGame);
+        return storedGame;
+      }
+    }
+    return undefined;
   }
 
-  getGameByCode(code: string): StoredGame | undefined {
-    return Array.from(this.games.values()).find(g => g.code === code);
+  async getGameByCode(code: string): Promise<StoredGame | undefined> {
+    // Search in-memory cache first
+    const cached = Array.from(this.games.values()).find(g => g.code === code);
+    if (cached) return cached;
+
+    // In a real multi-server production environment, codes should be in the DB.
+    // For now, we'll keep them in the memory Map which is restored on getGame calls.
+    return undefined;
   }
 
-  updateGame(id: string, updates: Partial<StoredGame>): StoredGame {
-    const game = this.games.get(id);
+  async updateGame(id: string, updates: Partial<StoredGame>): Promise<StoredGame> {
+    const game = await this.getGame(id);
     if (!game) throw new Error('Game not found');
     const updated = { ...game, ...updates };
     this.games.set(id, updated);
+
+    if (this.storage) {
+      await this.storage.updateGame(id, {
+        player2Id: updated.player2Id,
+        player1Secret: updated.player1Secret,
+        player2Secret: updated.player2Secret,
+        status: updated.status,
+        currentTurn: updated.currentTurn,
+        winnerId: updated.winnerId,
+        startedAt: updated.startedAt,
+        finishedAt: updated.endedAt,
+      });
+    }
+
     return updated;
   }
 
-  addMove(gameId: string, move: Omit<StoredMove, 'id' | 'createdAt'>): StoredMove {
-    const game = this.games.get(gameId);
+  async addMove(gameId: string, move: Omit<StoredMove, 'id' | 'createdAt'>): Promise<StoredMove> {
+    const game = await this.getGame(gameId);
     if (!game) throw new Error('Game not found');
+
+    if (this.storage) {
+      const dbMove = await this.storage.addGameMove({
+        gameId,
+        playerId: move.playerId,
+        guess: move.guess,
+        correctDigits: move.correctDigits,
+        correctPositions: move.correctPositions,
+        moveNumber: move.moveNumber,
+      });
+
+      const storedMove: StoredMove = {
+        ...move,
+        id: dbMove.id,
+        createdAt: dbMove.createdAt || new Date(),
+      };
+      game.moves.push(storedMove);
+      return storedMove;
+    }
 
     const storedMove: StoredMove = {
       ...move,
@@ -371,10 +474,18 @@ class GameStore {
   async updateStats(userId: string, gameId: string): Promise<void> {
     if (!this.storage) throw new Error('Storage not initialized');
 
-    const profile = this.profiles.get(userId);
+    // Load profile from DB if not in cache
+    let profile = this.profiles.get(userId);
+    if (!profile) {
+      profile = await this.getProfile(userId);
+    }
+
     const game = this.games.get(gameId);
 
-    if (!profile || !game) return;
+    if (!profile || !game) {
+      console.warn(`updateStats: could not find profile or game. userId=${userId}, gameId=${gameId}`);
+      return;
+    }
 
     profile.stats.gamesPlayed++;
     if (game.winnerId === userId) {
@@ -404,6 +515,7 @@ class GameStore {
   }
 
   getLeaderboard(limit: number = 50): UserProfile[] {
+    // Return from in-memory cache — populated when users play games
     return Array.from(this.profiles.values())
       .filter(p => p.stats.gamesPlayed > 0)
       .sort((a, b) => {
@@ -415,19 +527,78 @@ class GameStore {
       .slice(0, limit);
   }
 
+  // Get leaderboard from DB (for the /api/leaderboard endpoint that lives in routes)
+  async getLeaderboardFromDB(limit: number = 50): Promise<UserProfile[]> {
+    if (!this.storage) throw new Error('Storage not initialized');
+    const dbLeaderboard = await this.storage.getLeaderboard(limit);
+    const results: UserProfile[] = [];
+
+    for (const entry of dbLeaderboard) {
+      const profile: UserProfile = {
+        id: entry.user.id,
+        name: `${entry.user.firstName || ''} ${entry.user.lastName || ''}`.trim() || 'Player',
+        email: entry.user.email || '',
+        username: entry.user.username || undefined,
+        avatar: entry.user.profileImageUrl || undefined,
+        bio: entry.user.bio || undefined,
+        stats: {
+          gamesPlayed: entry.gamesPlayed || 0,
+          gamesWon: entry.gamesWon || 0,
+          winRate: entry.winRate || 0,
+          currentStreak: entry.currentStreak || 0,
+          bestStreak: entry.bestStreak || 0,
+          totalGuesses: 0,
+          averageGuesses: entry.averageGuesses || 0,
+        },
+        createdAt: entry.user.createdAt || new Date(),
+        lastActive: entry.updatedAt || new Date(),
+      };
+      results.push(profile);
+    }
+    return results;
+  }
+
   async searchUsers(query: string): Promise<UserProfile[]> {
     if (!this.storage) throw new Error('Storage not initialized');
 
-    // Search in database
+    // Search users table directly — works even for users with no stats yet
     const users = await this.storage.searchUsers(query);
 
-    // Convert to profiles
     const results: UserProfile[] = [];
     for (const user of users) {
-      const profile = await this.getProfile(user.id);
-      if (profile) {
-        results.push(profile);
-      }
+      // Skip AI user from search results
+      if (user.id === 'AI') continue;
+
+      // Try to get stats if they exist, but don't require them
+      const dbStats = await this.storage.getUserStats(user.id);
+
+      const profile: UserProfile = {
+        id: user.id,
+        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Player',
+        email: user.email || '',
+        username: user.username || undefined,
+        avatar: user.profileImageUrl || undefined,
+        bio: user.bio || undefined,
+        stats: {
+          gamesPlayed: dbStats?.gamesPlayed || 0,
+          gamesWon: dbStats?.gamesWon || 0,
+          winRate: dbStats?.gamesPlayed
+            ? Math.round(((dbStats.gamesWon || 0) / dbStats.gamesPlayed) * 100)
+            : 0,
+          currentStreak: dbStats?.currentStreak || 0,
+          bestStreak: dbStats?.bestStreak || 0,
+          totalGuesses: dbStats?.totalGuesses || 0,
+          averageGuesses: dbStats?.gamesPlayed
+            ? Math.round((dbStats.totalGuesses || 0) / dbStats.gamesPlayed)
+            : 0,
+        },
+        createdAt: user.createdAt || new Date(),
+        lastActive: new Date(),
+      };
+
+      // Update in-memory cache
+      this.profiles.set(user.id, profile);
+      results.push(profile);
     }
 
     return results;

@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
   email_verification_token VARCHAR,
   first_name VARCHAR,
   last_name VARCHAR,
+  username VARCHAR UNIQUE,
+  bio TEXT,
   profile_image_url VARCHAR,
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now()
@@ -100,21 +102,48 @@ CREATE TABLE IF NOT EXISTS leaderboard_stats (
 );
 `;
 
+// Alter statements — safe to run idempotently on existing databases
+const ALTER_MIGRATIONS = [
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR UNIQUE`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_url VARCHAR`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR`,
+  `ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS fastest_win_seconds INTEGER`,
+];
+
 export async function runMigrations(): Promise<void> {
   console.log("Running database migrations...");
   try {
-    // Split migrations by semicolon and filter empty statements
-    const statements = MIGRATIONS.split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+    // Run CREATE TABLE IF NOT EXISTS statements
+    const statements = MIGRATIONS.split(";")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
 
     for (const statement of statements) {
       await pool.query(statement);
     }
+
+    // Run ALTER TABLE statements to add missing columns to existing tables
+    for (const alter of ALTER_MIGRATIONS) {
+      try {
+        await pool.query(alter);
+      } catch (err: any) {
+        // Silently skip errors for alter statements (e.g., column type conflicts)
+        console.warn(`  ⚠️  Alter skipped: ${alter.substring(0, 60)}... (${err.message})`);
+      }
+    }
+
     console.log("✅ Database migrations completed successfully");
   } catch (error) {
-    console.error("⚠️  Database migration skipped:", (error as any)?.message || error);
-    console.error("DATABASE_URL credentials may be invalid. Using MemStorage fallback.");
-    // Don't throw - allow app to start
+    console.error(
+      "⚠️  Database migration error:",
+      (error as any)?.message || error
+    );
+    console.error(
+      "DATABASE_URL credentials may be invalid. Check your .env file."
+    );
+    // Don't throw - allow app to start with whatever tables exist
   }
 }

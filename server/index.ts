@@ -8,37 +8,49 @@ import { storage } from "./storage";
 import { runMigrations } from "./db";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+
+// Trust proxy for production (needed for secure cookies behind reverse proxy)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
 // Initialize memory store for sessions
 const memoryStore = MemoryStore(session);
 
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET && process.env.NODE_ENV === "production") {
+  console.error("❌ SESSION_SECRET environment variable is required in production!");
+  process.exit(1);
+}
+
 // Session configuration - MUST come before routes
 app.use(session({
   store: new memoryStore({
-    checkPeriod: 86400000 // 24 hours
+    checkPeriod: 86400000, // prune expired entries every 24h
   }),
-  secret: process.env.SESSION_SECRET || 'dev-secret-key-change-in-production',
+  secret: SESSION_SECRET || "dev-secret-key-change-in-production",
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Set to true in production with HTTPS
+    secure: process.env.NODE_ENV === "production", // HTTPS only in production
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax'
-  }
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+  },
 }));
 
-// Session middleware - check if user is authenticated
+// Session middleware - inject req.user from session
 const sessionMiddleware = (req: any, _res: any, next: any) => {
-  // Set userId from session or undefined if not authenticated
   req.user = req.session?.userId ? { id: req.session.userId } : null;
   next();
 };
 
 app.use(sessionMiddleware);
 
+// Request logging middleware (API routes only)
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -57,11 +69,9 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
+      if (logLine.length > 120) {
+        logLine = logLine.slice(0, 119) + "…";
       }
-
       log(logLine);
     }
   });
@@ -82,32 +92,25 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
+  // Global error handler - must be defined AFTER routes
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
+    console.error(`[Error] ${status} - ${message}`, err.stack);
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Serve frontend - only setup Vite in development
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-  }, () => {
+  const port = parseInt(process.env.PORT || "5000", 10);
+  server.listen({ port, host: "0.0.0.0" }, () => {
     log(`serving on port ${port}`);
   });
 })();

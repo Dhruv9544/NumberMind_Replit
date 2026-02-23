@@ -21,7 +21,7 @@ import {
   type LeaderboardStats,
   type InsertLeaderboardStats,
 } from "@shared/schema";
-import { eq, and, or, desc, ilike } from "drizzle-orm";
+import { eq, and, or, desc, ilike, inArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "./db";
 
@@ -29,10 +29,12 @@ export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   upsertUserWithId(id: string, user: UpsertUser): Promise<User>;
   createUserWithPassword(data: { email: string; passwordHash: string; emailVerificationToken: string }): Promise<User>;
   verifyUserEmail(userId: string): Promise<void>;
+  setUsername(userId: string, username: string): Promise<void>;
   initializeAIUser(): Promise<void>;
   searchUsers(query: string): Promise<User[]>;
 
@@ -120,8 +122,24 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    for (const user of Array.from(this.users.values())) {
+      if (user.username && user.username.toLowerCase() === username.toLowerCase()) {
+        return user as User;
+      }
+    }
+    return undefined;
+  }
+
+  async setUsername(userId: string, username: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) {
+      user.username = username;
+    }
+  }
+
   async searchUsers(query: string): Promise<User[]> {
-    const q = query.toLowerCase().replace('@', '');
+    const q = (query.startsWith('@') ? query.slice(1) : query).toLowerCase();
     return Array.from(this.users.values())
       .filter((user: User) =>
         (user.email && user.email.toLowerCase().includes(q)) ||
@@ -377,6 +395,29 @@ export class DatabaseStorage implements IStorage {
     return result[0] as User | undefined;
   }
 
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    // Exact, case-insensitive match using ilike without wildcards
+    const result = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          sql`${users.username} IS NOT NULL`,
+          sql`lower(${users.username}) = lower(${username})`
+        )
+      )
+      .limit(1);
+    return result[0];
+  }
+
+  async setUsername(userId: string, username: string): Promise<void> {
+    // Write directly to the users table — single, authoritative update
+    await db
+      .update(users)
+      .set({ username, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
   async createUserWithPassword(data: { email: string; passwordHash: string; emailVerificationToken: string }): Promise<User> {
     const id = nanoid();
     await db.insert(users).values({
@@ -404,7 +445,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchUsers(query: string): Promise<User[]> {
-    const q = `%${query.toLowerCase().replace('@', '')}%`;
+    // Strip a leading @ if user typed @username, but keep @ inside email addresses
+    const cleanQuery = query.startsWith('@') ? query.slice(1) : query;
+    const q = `%${cleanQuery.toLowerCase()}%`;
+
     return await db
       .select()
       .from(users)
@@ -413,7 +457,12 @@ export class DatabaseStorage implements IStorage {
           ilike(users.email, q),
           ilike(users.firstName, q),
           ilike(users.lastName, q),
-          ilike(users.username, q)
+          // Only match username when it's not null — ilike(null, q) returns NULL in Postgres
+          // which silently breaks OR logic. Use `and` to guard it.
+          and(
+            sql`${users.username} IS NOT NULL`,
+            ilike(users.username, q)
+          )
         )
       )
       .limit(20);
@@ -524,9 +573,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateGame(gameId: string, updates: Partial<GameSession>): Promise<GameSession> {
+    // Strip non-updatable/primary key fields before sending to DB
+    const { id: _id, createdAt: _createdAt, ...safeUpdates } = updates as any;
     await db
       .update(gameSessions)
-      .set(updates)
+      .set(safeUpdates)
       .where(eq(gameSessions.id, gameId));
     const game = await this.getGame(gameId);
     return game!;
@@ -600,7 +651,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(users)
-      .where(eq(users.id, friendIds[0]));
+      .where(inArray(users.id, friendIds));
   }
 
   async getFriendRequests(userId: string): Promise<User[]> {
@@ -615,7 +666,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(users)
-      .where(eq(users.id, userIds[0]));
+      .where(inArray(users.id, userIds));
   }
 
   async updateFriendStatus(friendshipId: string, status: string): Promise<Friend> {
@@ -690,20 +741,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLeaderboard(limit = 100): Promise<(LeaderboardStats & { user: User })[]> {
-    const stats = await db
-      .select()
+    // Single JOIN query instead of N+1
+    const results = await db
+      .select({
+        userId: leaderboardStats.userId,
+        rank: leaderboardStats.rank,
+        gamesPlayed: leaderboardStats.gamesPlayed,
+        gamesWon: leaderboardStats.gamesWon,
+        winRate: leaderboardStats.winRate,
+        currentStreak: leaderboardStats.currentStreak,
+        bestStreak: leaderboardStats.bestStreak,
+        averageGuesses: leaderboardStats.averageGuesses,
+        updatedAt: leaderboardStats.updatedAt,
+        user: users,
+      })
       .from(leaderboardStats)
-      .orderBy(desc(leaderboardStats.rank))
+      .innerJoin(users, eq(leaderboardStats.userId, users.id))
+      .orderBy(desc(leaderboardStats.gamesWon), desc(leaderboardStats.winRate))
       .limit(limit);
 
-    const results = await Promise.all(
-      stats.map(async (stat) => {
-        const user = await this.getUser(stat.userId);
-        return { ...stat, user: user! };
-      })
-    );
-
-    return results.filter(item => item.user);
+    return results as (LeaderboardStats & { user: User })[];
   }
 
   async getUserLeaderboardRank(userId: string): Promise<LeaderboardStats | undefined> {
