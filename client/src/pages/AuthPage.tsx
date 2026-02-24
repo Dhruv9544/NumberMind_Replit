@@ -34,14 +34,14 @@ export default function AuthPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   const validateEmail = (value: string): string | undefined => {
-    if (!value) return "Access ID required";
-    if (!value.includes("@") || !value.includes(".")) return "Invalid coordinate format";
+    if (!value) return "Email is required";
+    if (!value.includes("@") || !value.includes(".")) return "Please enter a valid email address";
     return undefined;
   };
 
   const validatePassword = (value: string): string | undefined => {
-    if (!value) return "Security key required";
-    if (value.length < 6 && !isLogin) return "Key must be 6+ characters";
+    if (!value) return "Password is required";
+    if (value.length < 6 && !isLogin) return "Password must be at least 6 characters";
     return undefined;
   };
 
@@ -73,8 +73,8 @@ export default function AuthPage() {
 
       if (!response.ok) {
         toast({
-          title: "Access Denied",
-          description: data.message || "Authentication protocols failed",
+          title: isLogin ? "Sign In Failed" : "Sign Up Failed",
+          description: data.message || (isLogin ? "Wrong email or password. Please try again." : "Couldn't create your account. Please try again."),
           variant: "destructive",
         });
         setLoading(false);
@@ -82,8 +82,10 @@ export default function AuthPage() {
       }
 
       toast({
-        title: "Access Granted",
-        description: data.message || (isLogin ? "Welcome back, Operator." : "Channel secured. Profile created."),
+        title: isLogin ? "Welcome back!" : "Account Created!",
+        description: isLogin
+          ? `Good to see you again. Let's play.`
+          : "Your account is ready. Sign in to start playing.",
       });
 
       setEmail("");
@@ -95,12 +97,12 @@ export default function AuthPage() {
       } else {
         await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
         await queryClient.refetchQueries({ queryKey: ['/api/auth/user'] });
-        setLocation("/"); 
+        setLocation("/");
       }
     } catch (error) {
       toast({
-        title: "System Error",
-        description: "Network intercept detected. Review connection.",
+        title: "Connection Error",
+        description: "Couldn't reach the server. Check your connection and try again.",
         variant: "destructive",
       });
     } finally {
@@ -169,15 +171,15 @@ export default function AuthPage() {
                   </div>
                   <Input
                     type="email"
-                    placeholder="EMAIL@MIND.NET"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => {
-                      setEmail(e.target.value.toUpperCase());
+                      setEmail(e.target.value);
                       setErrors({ ...errors, email: undefined });
                     }}
                     required
                     className={cn(
-                      "h-14 pl-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-xs font-black tracking-widest focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all uppercase placeholder:text-neutral-700",
+                      "h-14 pl-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-sm font-medium tracking-normal focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all placeholder:text-neutral-600",
                       errors.email && "border-red-500/50 bg-red-500/5"
                     )}
                   />
@@ -197,7 +199,7 @@ export default function AuthPage() {
                   </div>
                   <Input
                     type={showPassword ? "text" : "password"}
-                    placeholder="SECURITY KEY"
+                    placeholder="Your password"
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -205,7 +207,7 @@ export default function AuthPage() {
                     }}
                     required
                     className={cn(
-                      "h-14 pl-12 pr-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-xs font-black tracking-widest focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all placeholder:text-neutral-700",
+                      "h-14 pl-12 pr-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-sm font-medium tracking-normal focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all placeholder:text-neutral-600",
                       errors.password && "border-red-500/50 bg-red-500/5"
                     )}
                   />

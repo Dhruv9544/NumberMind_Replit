@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Navbar } from "@/components/Navbar";
 import { GameLoader } from "@/components/GameLoader";
 import { WebSocketProvider } from "@/context/WebSocketContext";
+import LandingPage from "@/pages/Landing";
 import AuthPage from "@/pages/AuthPage";
 import UsernameSetupPage from "@/pages/UsernameSetupPage";
 import NotFound from "@/pages/not-found";
@@ -23,47 +24,64 @@ import HistoryPage from "@/pages/History";
 
 function Router() {
   const [location, setLocation] = useLocation();
-  
+
   // Check if user is authenticated
   const { data: user, isLoading } = useQuery<any>({
-    queryKey: ['/api/auth/user'],
+    queryKey: ["/api/auth/user"],
     retry: false,
   });
 
-  // Handle redirects using effect instead of during render
   useEffect(() => {
     if (isLoading) return;
-    
-    if (!user && location !== '/auth') {
-      setLocation('/auth');
-    } else if (user && !user.usernameSet && location !== '/setup-username') {
-      setLocation('/setup-username');
-    } else if (user && user.usernameSet && (location === '/auth' || location === '/setup-username')) {
-      setLocation('/');
+
+    if (!user) {
+      // Unauthenticated: only allow landing and auth pages
+      if (location !== "/" && location !== "/auth") {
+        setLocation("/");
+      }
+    } else if (user && !user.usernameSet) {
+      // Authenticated but no username yet
+      if (location !== "/setup-username") {
+        setLocation("/setup-username");
+      }
+    } else if (user && user.usernameSet) {
+      // Fully authenticated: kick away from landing/auth/setup pages
+      if (
+        location === "/auth" ||
+        location === "/setup-username"
+      ) {
+        setLocation("/");
+      }
     }
   }, [user, isLoading, location, setLocation]);
 
-  // Show custom game loader
+  // Loading screen
   if (isLoading) {
     return <GameLoader fullScreen text="Verifying Clearance..." />;
   }
 
-  // If not authenticated, show auth page
+  // ── Unauthenticated routes ──────────────────────────────────────
   if (!user) {
-    return <Switch>
-      <Route path="*" component={AuthPage} />
-    </Switch>;
+    return (
+      <Switch>
+        <Route path="/" component={LandingPage} />
+        <Route path="/auth" component={AuthPage} />
+        <Route component={LandingPage} />
+      </Switch>
+    );
   }
 
-  // If username not set, show username setup
+  // ── Username setup ──────────────────────────────────────────────
   if (!user.usernameSet) {
-    return <Switch>
-      <Route path="/setup-username" component={UsernameSetupPage} />
-      <Route path="*" component={UsernameSetupPage} />
-    </Switch>;
+    return (
+      <Switch>
+        <Route path="/setup-username" component={UsernameSetupPage} />
+        <Route component={UsernameSetupPage} />
+      </Switch>
+    );
   }
 
-  // User is authenticated and has username, show app
+  // ── Authenticated & fully set up ────────────────────────────────
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -86,6 +104,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        {/* Navbar is hidden on landing page — it has its own nav */}
         <Navbar />
         <WebSocketProvider>
           <Router />

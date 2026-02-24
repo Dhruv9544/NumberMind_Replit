@@ -16,16 +16,16 @@ export function Navbar() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-      setLocation('/auth');
+      queryClient.clear();
+      setLocation('/');
       toast({
         title: "Logged out",
-        description: "You have been logged out successfully",
+        description: "See you next time!",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to logout",
+        description: "Failed to log out. Please try again.",
         variant: "destructive",
       });
     }

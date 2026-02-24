@@ -15,6 +15,7 @@ import {
   Trophy, 
   Target, 
   User as UserIcon, 
+  Bot as BotIcon,
   Clock, 
   Hash,
   ChevronRight,
@@ -164,7 +165,7 @@ export default function GamePlay() {
                   <UserIcon className="w-4 h-4 text-emerald-500" />
                 </div>
                 <div className="w-9 h-9 rounded-full bg-neutral-800 border-2 border-neutral-950 flex items-center justify-center">
-                  {isAIGame ? <Bot className="w-4 h-4 text-blue-500" /> : <UserIcon className="w-4 h-4 text-blue-500" />}
+                  {isAIGame ? <BotIcon className="w-4 h-4 text-blue-500" /> : <UserIcon className="w-4 h-4 text-blue-500" />}
                 </div>
               </div>
               <div className="text-right">
@@ -299,109 +300,180 @@ export default function GamePlay() {
               </Card>
             )}
 
-            {/* History Tabs / Layout */}
+            {/* ── GUESS HISTORY ─────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               {/* Your History */}
-               <div className="space-y-4">
-                  <div className="flex items-center gap-2 px-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+
+              {/* YOUR GUESSES */}
+              <div className="flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-3 px-0.5">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                     <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-400">Your Guesses</h3>
                   </div>
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                    <AnimatePresence initial={false}>
-                      {playerMoves.length === 0 ? (
-                        <div className="text-center py-12 rounded-2xl border border-dashed border-neutral-800 bg-neutral-900/30">
-                          <p className="text-neutral-500 text-sm">No attempts yet</p>
-                        </div>
-                      ) : (
-                        playerMoves.map((move) => (
-                          <motion.div
-                            key={move.id}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 shadow-sm group hover:border-emerald-500/30 transition-all duration-300"
-                          >
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <span className="text-[10px] font-black text-neutral-600 tabular-nums">#{move.moveNumber}</span>
-                                <div className="flex gap-1">
-                                  {move.guess.split('').map((digit, i) => (
-                                    <div
-                                      key={i}
-                                      className="w-8 h-9 rounded-md bg-neutral-800 border border-neutral-700 flex items-center justify-center text-sm font-black text-emerald-400 group-hover:border-emerald-500/20 transition-colors"
-                                    >
-                                      {digit}
-                                    </div>
-                                  ))}
+                  <span className="min-w-[22px] text-center text-[10px] font-black tabular-nums text-neutral-600 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded-full">
+                    {playerMoves.length}
+                  </span>
+                </div>
+
+                {/* Scroll container — scrollbar-gutter:stable pre-reserves scrollbar space
+                    so the card width NEVER changes when the list grows */}
+                <div
+                  style={{ scrollbarGutter: 'stable' }}
+                  className="overflow-y-auto max-h-[420px] space-y-2
+                    [&::-webkit-scrollbar]:w-[5px]
+                    [&::-webkit-scrollbar-track]:rounded-full
+                    [&::-webkit-scrollbar-track]:bg-neutral-900
+                    [&::-webkit-scrollbar-thumb]:rounded-full
+                    [&::-webkit-scrollbar-thumb]:bg-neutral-700"
+                >
+                  <AnimatePresence initial={false}>
+                    {playerMoves.length === 0 ? (
+                      <div className="text-center py-10 rounded-2xl border border-dashed border-neutral-800 bg-neutral-900/30">
+                        <p className="text-neutral-600 text-xs font-bold uppercase tracking-widest">No guesses yet</p>
+                      </div>
+                    ) : (
+                      playerMoves.map((move) => (
+                        <motion.div
+                          key={move.id}
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="group bg-neutral-900 border border-neutral-800 rounded-xl
+                                     hover:border-emerald-500/30 transition-colors duration-200 overflow-hidden"
+                        >
+                          {/* 3-column grid: number | digits | badges
+                              The grid col sizes are fixed so adding a scrollbar never collapses. */}
+                          <div className="grid items-center gap-x-2 px-3 py-2.5"
+                               style={{ gridTemplateColumns: '26px 1fr auto' }}>
+
+                            <span className="text-[10px] font-black text-neutral-700 tabular-nums text-center">
+                              #{move.moveNumber}
+                            </span>
+
+                            <div className="flex gap-1">
+                              {move.guess.split('').map((digit, i) => (
+                                <div
+                                  key={i}
+                                  className="w-8 h-8 rounded-lg bg-neutral-800 border border-neutral-700
+                                             group-hover:border-emerald-500/25 flex items-center justify-center
+                                             text-sm font-black text-emerald-400 transition-colors shrink-0"
+                                >
+                                  {digit}
                                 </div>
+                              ))}
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <div className="flex items-center gap-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-1.5 py-1">
+                                <Target className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span className="text-[11px] font-black text-emerald-400 tabular-nums leading-none">{move.correctPositions}</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Badge className="bg-emerald-900/20 text-emerald-400 hover:bg-emerald-900/30 border-none font-bold tabular-nums">
-                                  {move.correctPositions}·Pos
-                                </Badge>
-                                <Badge className="bg-yellow-900/20 text-yellow-500 hover:bg-yellow-900/30 border-none font-bold tabular-nums">
-                                  {move.correctDigits}·Dig
-                                </Badge>
+                              <div className="flex items-center gap-0.5 bg-yellow-500/10 border border-yellow-500/20 rounded-md px-1.5 py-1">
+                                <Hash className="w-3 h-3 text-yellow-400 shrink-0" />
+                                <span className="text-[11px] font-black text-yellow-400 tabular-nums leading-none">{move.correctDigits}</span>
                               </div>
                             </div>
-                          </motion.div>
-                        ))
-                      )}
-                    </AnimatePresence>
-                  </div>
-               </div>
+                          </div>
 
-               {/* Opponent History */}
-               <div className="space-y-4">
-                  <div className="flex items-center gap-2 px-1">
-                    <CircleDashed className="w-4 h-4 text-blue-500" />
+                          {move.correctPositions === 4 && (
+                            <div className="bg-emerald-500/10 border-t border-emerald-500/20 px-3 py-1 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">Code Cracked!</span>
+                            </div>
+                          )}
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              {/* OPPONENT / AI GUESSES */}
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between mb-3 px-0.5">
+                  <div className="flex items-center gap-2">
+                    <CircleDashed className="w-4 h-4 text-blue-500 shrink-0" />
                     <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-400">
-                      {isAIGame ? "AI Attempts" : "Opponent Attempts"}
+                      {isAIGame ? 'AI Attempts' : 'Opponent'}
                     </h3>
                   </div>
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                    <AnimatePresence initial={false}>
-                      {opponentMoves.length === 0 ? (
-                        <div className="text-center py-12 rounded-2xl border border-dashed border-neutral-800 bg-neutral-900/30">
-                          <p className="text-neutral-500 text-sm">No attempts yet</p>
-                        </div>
-                      ) : (
-                        opponentMoves.map((move) => (
-                          <motion.div
-                            key={move.id}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 shadow-sm hover:border-blue-500/30 transition-all duration-300"
-                          >
-                             <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <span className="text-[10px] font-black text-neutral-600 tabular-nums">#{move.moveNumber}</span>
-                                  <div className="flex gap-1 opacity-70">
-                                    {move.guess.split('').map((digit, i) => (
-                                      <div
-                                        key={i}
-                                        className="w-8 h-9 rounded-md bg-neutral-800 border border-neutral-700 flex items-center justify-center text-sm font-black text-blue-400"
-                                      >
-                                        {digit}
-                                      </div>
-                                    ))}
-                                  </div>
+                  <span className="min-w-[22px] text-center text-[10px] font-black tabular-nums text-neutral-600 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded-full">
+                    {opponentMoves.length}
+                  </span>
+                </div>
+
+                <div
+                  style={{ scrollbarGutter: 'stable' }}
+                  className="overflow-y-auto max-h-[420px] space-y-2
+                    [&::-webkit-scrollbar]:w-[5px]
+                    [&::-webkit-scrollbar-track]:rounded-full
+                    [&::-webkit-scrollbar-track]:bg-neutral-900
+                    [&::-webkit-scrollbar-thumb]:rounded-full
+                    [&::-webkit-scrollbar-thumb]:bg-neutral-700"
+                >
+                  <AnimatePresence initial={false}>
+                    {opponentMoves.length === 0 ? (
+                      <div className="text-center py-10 rounded-2xl border border-dashed border-neutral-800 bg-neutral-900/30">
+                        <p className="text-neutral-600 text-xs font-bold uppercase tracking-widest">No guesses yet</p>
+                      </div>
+                    ) : (
+                      opponentMoves.map((move) => (
+                        <motion.div
+                          key={move.id}
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="group bg-neutral-900 border border-neutral-800 rounded-xl
+                                     hover:border-blue-500/30 transition-colors duration-200 overflow-hidden"
+                        >
+                          <div className="grid items-center gap-x-2 px-3 py-2.5"
+                               style={{ gridTemplateColumns: '26px 1fr auto' }}>
+
+                            <span className="text-[10px] font-black text-neutral-700 tabular-nums text-center">
+                              #{move.moveNumber}
+                            </span>
+
+                            <div className="flex gap-1 opacity-85">
+                              {move.guess.split('').map((digit, i) => (
+                                <div
+                                  key={i}
+                                  className="w-8 h-8 rounded-lg bg-neutral-800 border border-neutral-700
+                                             group-hover:border-blue-500/25 flex items-center justify-center
+                                             text-sm font-black text-blue-400 transition-colors shrink-0"
+                                >
+                                  {digit}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge className="bg-blue-900/20 text-blue-400 border-none font-bold">
-                                    {move.correctPositions}
-                                  </Badge>
-                                  <Badge className="bg-neutral-800 text-neutral-500 border-none font-bold">
-                                    {move.correctDigits}
-                                  </Badge>
-                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <div className="flex items-center gap-0.5 bg-blue-500/10 border border-blue-500/20 rounded-md px-1.5 py-1">
+                                <Target className="w-3 h-3 text-blue-400 shrink-0" />
+                                <span className="text-[11px] font-black text-blue-400 tabular-nums leading-none">{move.correctPositions}</span>
                               </div>
-                          </motion.div>
-                        ))
-                      )}
-                    </AnimatePresence>
-                  </div>
-               </div>
+                              <div className="flex items-center gap-0.5 bg-neutral-800 border border-neutral-700 rounded-md px-1.5 py-1">
+                                <Hash className="w-3 h-3 text-neutral-500 shrink-0" />
+                                <span className="text-[11px] font-black text-neutral-400 tabular-nums leading-none">{move.correctDigits}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {move.correctPositions === 4 && (
+                            <div className="bg-blue-500/10 border-t border-blue-500/20 px-3 py-1 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3 h-3 text-blue-400" />
+                              <span className="text-[10px] font-black text-blue-400 uppercase tracking-wider">
+                                {isAIGame ? 'AI Cracked It!' : 'They Cracked It!'}
+                              </span>
+                            </div>
+                          )}
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -511,28 +583,6 @@ export default function GamePlay() {
   );
 }
 
-// Missing icons for the refactor
-function Bot(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 8V4H8" />
-      <rect width="16" height="12" x="4" y="8" rx="2" />
-      <path d="M2 14h2" />
-      <path d="M20 14h2" />
-      <path d="M15 13v2" />
-      <path d="M9 13v2" />
-    </svg>
-  )
-}
+
+
 

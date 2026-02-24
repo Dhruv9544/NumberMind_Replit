@@ -203,9 +203,11 @@ export default function GameSetup() {
                        <Target className="w-5 h-5 text-emerald-500" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm mb-1">Deduction Rules</h4>
+                      <h4 className="font-bold text-sm mb-1">How Scoring Works</h4>
                       <p className="text-xs text-neutral-400 leading-relaxed">
-                        Each turn, guess a 4-digit code. We'll tell you how many digits are correct and how many are in the right position.
+                        <strong className="text-emerald-400">Dig</strong> = how many digits in your guess also appear in the secret (any position).<br />
+                        <strong className="text-emerald-400">Pos</strong> = how many of those are also in the right spot.<br />
+                        Pos is always &le; Dig. When Pos = 4, you win.
                       </p>
                     </div>
                   </div>
@@ -213,13 +215,13 @@ export default function GameSetup() {
                   <div className="grid grid-cols-2 gap-4">
                      <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                         <span className="text-xl font-bold text-emerald-500">✓ Pos</span>
-                        <p className="text-[10px] text-emerald-400 mt-1 uppercase font-bold">Perfect Match</p>
-                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Correct digit in the exact right spot.</p>
+                        <p className="text-[10px] text-emerald-400 mt-1 uppercase font-bold">Exact Position</p>
+                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Right digit in the right spot. 4 Pos = WIN.</p>
                      </div>
                      <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                         <span className="text-xl font-bold text-yellow-500">◆ Dig</span>
-                        <p className="text-[10px] text-yellow-500 mt-1 uppercase font-bold">Partial Match</p>
-                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Digit exists in the code but wrong spot.</p>
+                        <p className="text-[10px] text-yellow-500 mt-1 uppercase font-bold">Common Digits</p>
+                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Total digits shared with the secret — <em>includes</em> Pos hits. Dig &ge; Pos always.</p>
                      </div>
                   </div>
 

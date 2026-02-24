@@ -38,10 +38,10 @@ export default function UsernameSetupPage() {
   }
 
   const validateUsername = (value: string): string | undefined => {
-    if (!value) return "Codename required";
-    if (value.length < 3) return "Codename is too short (min 3)";
-    if (value.length > 20) return "Codename is too long (max 20)";
-    if (!/^[a-zA-Z0-9_-]+$/.test(value)) return "Only alphanumeric, _ and - allowed";
+    if (!value) return "Username is required";
+    if (value.length < 3) return "Username must be at least 3 characters";
+    if (value.length > 20) return "Username must be 20 characters or less";
+    if (!/^[a-zA-Z0-9_-]+$/.test(value)) return "Only letters, numbers, _ and - are allowed";
     return undefined;
   };
 
@@ -136,21 +136,21 @@ export default function UsernameSetupPage() {
                      )} />
                    </div>
                    <Input
-                    type="text"
-                    placeholder="ENTER CODENAME"
-                    value={username}
-                    onChange={(e) => {
-                      const value = e.target.value.toUpperCase();
-                      setUsername(value);
-                      const error = validateUsername(value);
-                      setErrors({ username: error });
-                    }}
-                    disabled={mutation.isPending}
-                    className={cn(
-                      "h-14 pl-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-xs font-black tracking-widest focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all uppercase placeholder:text-neutral-700",
-                      errors.username && "border-red-500/50 bg-red-500/5"
-                    )}
-                  />
+                     type="text"
+                     placeholder="e.g. cipher_x or MindHacker99"
+                     value={username}
+                     onChange={(e) => {
+                       const value = e.target.value;
+                       setUsername(value);
+                       const error = validateUsername(value);
+                       setErrors({ username: error });
+                     }}
+                     disabled={mutation.isPending}
+                     className={cn(
+                       "h-14 pl-12 bg-neutral-800/50 border-neutral-800 rounded-2xl text-sm font-medium tracking-normal focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all placeholder:text-neutral-600",
+                       errors.username && "border-red-500/50 bg-red-500/5"
+                     )}
+                   />
                   {username && !errors.username && (
                     <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
                       <ShieldCheck className="w-4 h-4 text-emerald-500" />

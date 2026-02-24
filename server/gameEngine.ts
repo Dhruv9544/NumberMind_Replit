@@ -8,42 +8,44 @@ export class GameEngine {
     if (number.length !== length) {
       return { isValid: false, error: `Number must be exactly ${length} digits` };
     }
-    
+
     if (!/^\d+$/.test(number)) {
       return { isValid: false, error: "Number must contain only digits" };
     }
-    
+
     const digits = number.split('');
     const uniqueDigits = new Set(digits);
-    
+
     if (uniqueDigits.size !== length) {
       return { isValid: false, error: "All digits must be unique" };
     }
-    
+
     return { isValid: true };
   }
 
   static calculateFeedback(guess: string, secret: string): GameFeedback {
     const guessDigits = guess.split('');
     const secretDigits = secret.split('');
-    
+
     let correctPositions = 0;
     let correctDigits = 0;
-    
-    // Count correct positions (exact matches)
+
+    // Pos: count digits in the exact correct position
     for (let i = 0; i < guessDigits.length; i++) {
       if (guessDigits[i] === secretDigits[i]) {
         correctPositions++;
       }
     }
-    
-    // Count all correct digits (regardless of position)
+
+    // Dig: count ALL guess digits that exist anywhere in the secret
+    // (this INCLUDES digits already counted in correctPositions — by design)
+    // Since both guess and secret have unique digits, no frequency map needed.
     for (const digit of guessDigits) {
       if (secretDigits.includes(digit)) {
         correctDigits++;
       }
     }
-    
+
     return { correctDigits, correctPositions };
   }
 
