@@ -59,16 +59,16 @@ export default function UsernameSetupPage() {
     },
     onSuccess: () => {
       toast({
-        title: "Protocol Success",
-        description: "Identity established on the network.",
+        title: "Username Set!",
+        description: "You're all set. Time to play!",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       setLocation("/");
     },
     onError: (error: any) => {
       toast({
-        title: "Sync Error",
-        description: error.message || "Failed to establish identity",
+        title: "Couldn't Save Username",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     },
@@ -92,7 +92,7 @@ export default function UsernameSetupPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] w-full bg-neutral-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500/30 overflow-y-auto font-sans">
       <AnimatePresence>
-         {isPending && <GameLoader fullScreen text="Establishing Security Clearance..." />}
+         {isPending && <GameLoader fullScreen text="Saving your username..." />}
       </AnimatePresence>
       {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none opacity-20">
@@ -110,18 +110,18 @@ export default function UsernameSetupPage() {
               <UserCircle className="w-10 h-10 text-emerald-500" />
            </div>
            <h1 className="text-4xl font-black tracking-tight mb-2 italic uppercase">
-              IDENTITY<span className="text-emerald-500">SET</span>
+               PICK YOUR<span className="text-emerald-500"> NAME</span>
            </h1>
-           <p className="text-neutral-500 text-[10px] font-black uppercase tracking-[0.4em]">Establish Network Presence</p>
+           <p className="text-neutral-500 text-[10px] font-black uppercase tracking-[0.4em]">This is how others will find and challenge you</p>
         </div>
 
         <Card className="border-neutral-800 bg-neutral-900/50 backdrop-blur-xl rounded-[2.5rem] overflow-hidden shadow-2xl">
           <CardHeader className="pt-10 pb-6 text-center">
             <CardTitle className="text-2xl font-black italic uppercase italic tracking-tight mb-2">
-              Select Codename
+              Choose Your Username
             </CardTitle>
             <CardDescription className="text-neutral-500 font-bold text-xs uppercase tracking-widest leading-relaxed px-6">
-               This unique ID will represent you in global challenges and leaderboards
+               This is your public game name — visible on leaderboards and to friends
             </CardDescription>
           </CardHeader>
 
@@ -177,10 +177,10 @@ export default function UsernameSetupPage() {
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    <span className="relative z-10 flex items-center gap-2">
-                       Synchronize Identity
-                       <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    </span>
+                     <span className="relative z-10 flex items-center gap-2">
+                        Confirm Username
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                     </span>
                     <motion.div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
                   </>
                 )}

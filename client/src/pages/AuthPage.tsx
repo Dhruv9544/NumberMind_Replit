@@ -113,7 +113,7 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen w-full bg-neutral-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500/30 overflow-y-auto font-sans">
       <AnimatePresence>
-         {loading && <GameLoader fullScreen text="Verifying Identity Credentials..." />}
+         {loading && <GameLoader fullScreen text="Signing you in..." />}
       </AnimatePresence>
       {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none opacity-20">
@@ -134,7 +134,7 @@ export default function AuthPage() {
            <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-2 italic uppercase">
               NUMBER<span className="text-emerald-500">MIND</span>
            </h1>
-           <p className="text-neutral-500 text-xs font-black uppercase tracking-[0.4em]">Access Terminal 01</p>
+           <p className="text-neutral-500 text-xs font-black uppercase tracking-[0.4em]">Sign in to play</p>
         </div>
 
         <Card className="border-neutral-800 bg-neutral-900/50 backdrop-blur-xl rounded-[2.5rem] overflow-hidden shadow-2xl">
@@ -148,12 +148,12 @@ export default function AuthPage() {
                 transition={{ duration: 0.2 }}
               >
                 <CardTitle className="text-2xl font-black italic uppercase italic tracking-tight mb-2">
-                  {isLogin ? "Initiate Session" : "Deploy Operation"}
+                  {isLogin ? "Log In" : "Create Account"}
                 </CardTitle>
                 <CardDescription className="text-neutral-500 font-bold text-xs uppercase tracking-widest leading-relaxed">
                   {isLogin
-                    ? "Verify clearance level to proceed"
-                    : "Establish new credentials on the network"}
+                    ? "Welcome back — enter your email and password"
+                    : "Register a free account to start playing"}
                 </CardDescription>
               </motion.div>
             </AnimatePresence>
@@ -234,7 +234,7 @@ export default function AuthPage() {
                 ) : (
                   <>
                     <span className="relative z-10 flex items-center gap-2">
-                       {isLogin ? "Auth Access" : "Configure Account"}
+                       {isLogin ? "Log In" : "Sign Up"}
                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                     </span>
                     <motion.div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
@@ -249,8 +249,8 @@ export default function AuthPage() {
                 className="text-xs font-black uppercase tracking-widest text-neutral-500 hover:text-emerald-400 transition-colors"
               >
                 {isLogin
-                  ? "Lack Authorization? Request Key"
-                  : "Return to Access Terminal"}
+                  ? "Don't have an account? Sign Up"
+                  : "Already have an account? Log In"}
               </button>
             </div>
           </CardContent>

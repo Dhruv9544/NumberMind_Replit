@@ -503,7 +503,10 @@ class GameStore {
     profile.stats.averageGuesses = Math.round(profile.stats.totalGuesses / profile.stats.gamesPlayed);
     profile.lastActive = new Date();
 
-    // PERSIST TO DATABASE
+    const winRate = profile.stats.winRate;
+    const avgGuesses = profile.stats.averageGuesses;
+
+    // Persist to user_stats (used by /api/auth/user & profile)
     await this.storage.upsertUserStats({
       userId,
       gamesPlayed: profile.stats.gamesPlayed,
@@ -511,6 +514,17 @@ class GameStore {
       currentStreak: profile.stats.currentStreak,
       bestStreak: profile.stats.bestStreak,
       totalGuesses: profile.stats.totalGuesses,
+    });
+
+    // Also persist to leaderboard_stats (used by /api/leaderboard)
+    await this.storage.updateLeaderboardStats({
+      userId,
+      gamesPlayed: profile.stats.gamesPlayed,
+      gamesWon: profile.stats.gamesWon,
+      winRate,
+      currentStreak: profile.stats.currentStreak,
+      bestStreak: profile.stats.bestStreak,
+      averageGuesses: avgGuesses,
     });
   }
 
@@ -527,35 +541,71 @@ class GameStore {
       .slice(0, limit);
   }
 
-  // Get leaderboard from DB (for the /api/leaderboard endpoint that lives in routes)
+  // Get leaderboard from DB — reads user_stats JOIN users so ALL finished games show up.
+  // Also syncs into leaderboard_stats for consistency.
   async getLeaderboardFromDB(limit: number = 50): Promise<UserProfile[]> {
     if (!this.storage) throw new Error('Storage not initialized');
-    const dbLeaderboard = await this.storage.getLeaderboard(limit);
-    const results: UserProfile[] = [];
 
-    for (const entry of dbLeaderboard) {
-      const profile: UserProfile = {
-        id: entry.user.id,
-        name: `${entry.user.firstName || ''} ${entry.user.lastName || ''}`.trim() || 'Player',
-        email: entry.user.email || '',
-        username: entry.user.username || undefined,
-        avatar: entry.user.profileImageUrl || undefined,
-        bio: entry.user.bio || undefined,
+    // Query user_stats joined with users — this table is always up-to-date
+    const { db } = await import('./db');
+    const { userStats, users } = await import('@shared/schema');
+    const { desc, sql, eq, and, ne } = await import('drizzle-orm');
+
+    const rows = await db
+      .select({
+        userId: userStats.userId,
+        gamesPlayed: userStats.gamesPlayed,
+        gamesWon: userStats.gamesWon,
+        currentStreak: userStats.currentStreak,
+        bestStreak: userStats.bestStreak,
+        totalGuesses: userStats.totalGuesses,
+        updatedAt: userStats.updatedAt,
+        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        profileImageUrl: users.profileImageUrl,
+        bio: users.bio,
+        createdAt: users.createdAt,
+      })
+      .from(userStats)
+      .innerJoin(users, eq(userStats.userId, users.id))
+      .where(
+        and(
+          sql`${userStats.gamesPlayed} > 0`,
+          ne(userStats.userId, 'AI')  // exclude AI player from rankings
+        )
+      )
+      .orderBy(desc(userStats.gamesWon), desc(userStats.gamesPlayed))
+      .limit(limit);
+
+    return rows.map(row => {
+      const played = row.gamesPlayed ?? 0;
+      const won = row.gamesWon ?? 0;
+      const total = row.totalGuesses ?? 0;
+      const winRate = played > 0 ? Math.round((won / played) * 100) : 0;
+      const avgGuesses = played > 0 && total > 0 ? Math.round(total / played) : 0;
+
+      return {
+        id: row.userId,
+        name: `${row.firstName || ''} ${row.lastName || ''}`.trim() || row.username || 'Player',
+        email: row.email || '',
+        username: row.username || undefined,
+        avatar: row.profileImageUrl || undefined,
+        bio: row.bio || undefined,
         stats: {
-          gamesPlayed: entry.gamesPlayed || 0,
-          gamesWon: entry.gamesWon || 0,
-          winRate: entry.winRate || 0,
-          currentStreak: entry.currentStreak || 0,
-          bestStreak: entry.bestStreak || 0,
-          totalGuesses: 0,
-          averageGuesses: entry.averageGuesses || 0,
+          gamesPlayed: played,
+          gamesWon: won,
+          winRate,
+          currentStreak: row.currentStreak ?? 0,
+          bestStreak: row.bestStreak ?? 0,
+          totalGuesses: total,
+          averageGuesses: avgGuesses,
         },
-        createdAt: entry.user.createdAt || new Date(),
-        lastActive: entry.updatedAt || new Date(),
-      };
-      results.push(profile);
-    }
-    return results;
+        createdAt: row.createdAt || new Date(),
+        lastActive: row.updatedAt || new Date(),
+      } as UserProfile;
+    });
   }
 
   async searchUsers(query: string): Promise<UserProfile[]> {

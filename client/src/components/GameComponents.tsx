@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -215,9 +215,59 @@ export function GameStatus({ status, currentPlayer, turnNumber }: GameStatusProp
   );
 }
 
-export function useNumberInput(maxLength: number = 4) {
+export function useNumberInput(maxLength: number = 4, options?: { enabled?: boolean; onSubmit?: () => void }) {
   const [digits, setDigits] = useState<string[]>(new Array(maxLength).fill(''));
   const [currentSlot, setCurrentSlot] = useState(0);
+
+  // Keyboard / numpad support
+  useEffect(() => {
+    const keyboardEnabled = options?.enabled !== false; // default: enabled
+    if (!keyboardEnabled) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing inside an input/textarea/select
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      const isDigitKey  = e.key >= '0' && e.key <= '9';
+      const isNumpadKey = e.code?.startsWith('Numpad') && e.code.length === 7;
+      const isBackspace = e.key === 'Backspace' || e.key === 'Delete';
+      const isEnter     = e.key === 'Enter';
+
+      if (isDigitKey || isNumpadKey) {
+        const digit = isNumpadKey ? e.code.slice(-1) : e.key;
+        e.preventDefault();
+        setDigits(prev => {
+          // Find next empty slot starting from beginning, or use currentSlot
+          const slot = prev.findIndex(d => d === '');
+          if (slot === -1) return prev; // full
+          const next = [...prev];
+          next[slot] = digit;
+          return next;
+        });
+        setCurrentSlot(prev => Math.min(prev + 1, maxLength));
+      } else if (isBackspace) {
+        e.preventDefault();
+        setCurrentSlot(prev => {
+          const newSlot = Math.max(prev - 1, 0);
+          setDigits(d => {
+            const next = [...d];
+            // clear the last filled slot
+            const lastFilled = [...d].map((v,i) => v !== '' ? i : -1).filter(i => i !== -1).pop();
+            if (lastFilled !== undefined) next[lastFilled] = '';
+            return next;
+          });
+          return newSlot;
+        });
+      } else if (isEnter) {
+        e.preventDefault();
+        options?.onSubmit?.();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [maxLength, options?.enabled, options?.onSubmit]);
 
   const inputDigit = (digit: string) => {
     if (currentSlot < maxLength) {
@@ -275,3 +325,4 @@ export function useNumberInput(maxLength: number = 4) {
     focusSlot,
   };
 }
+

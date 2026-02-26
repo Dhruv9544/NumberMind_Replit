@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation, useParams, Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -69,7 +69,10 @@ export default function GamePlay() {
   const { toast } = useToast();
   const [showWinDialog, setShowWinDialog] = useState(false);
 
-  const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot, reset } = useNumberInput();
+  const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot, reset } = useNumberInput(4, {
+    enabled: true, // enabled globally; guard inside handleGuess handles turn/game-over
+    onSubmit: () => handleGuess(),
+  });
 
   const { data: game, refetch } = useQuery<GameState>({
     queryKey: ['/api/games', gameId],
@@ -101,7 +104,8 @@ export default function GamePlay() {
     }
   }, [game?.status]);
 
-  const handleGuess = () => {
+  // Define handleGuess with useCallback BEFORE passing it to useNumberInput
+  const handleGuess = useCallback(() => {
     if (!isComplete()) {
       toast({
         title: 'Invalid Guess',
@@ -111,7 +115,7 @@ export default function GamePlay() {
       return;
     }
     makeMoveMutation.mutate({ guess: getValue() });
-  };
+  }, [isComplete, getValue, makeMoveMutation, toast]);
 
   if (!game) return (
     <div className="w-full h-screen flex flex-col items-center justify-center bg-neutral-950">
@@ -228,9 +232,9 @@ export default function GamePlay() {
                         <Target className="w-5 h-5 text-emerald-500" />
                         Next Guess
                       </CardTitle>
-                      <CardDescription className="text-neutral-400">
-                        Enter any 4 unique digits
-                      </CardDescription>
+                       <CardDescription className="text-neutral-400">
+                         Type digits or use the pad below · <kbd className="text-[10px] font-black bg-neutral-800 border border-neutral-700 rounded px-1 py-0.5 text-neutral-400">Enter</kbd> to submit
+                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -271,6 +275,13 @@ export default function GamePlay() {
                       </Button>
                     ))}
                   </div>
+
+                  {/* Keyboard hint */}
+                  {isPlayerTurn && (
+                    <p className="text-center text-[10px] font-bold text-neutral-700 uppercase tracking-widest">
+                      ⌨ Type digits · Backspace to erase · Enter to submit
+                    </p>
+                  )}
                 </CardContent>
                 <CardFooter className="flex gap-4 p-6 bg-black/10 border-t border-neutral-800/50">
                   <Button

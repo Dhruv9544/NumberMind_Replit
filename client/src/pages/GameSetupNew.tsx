@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation, Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,12 @@ export default function GameSetup() {
   const [searchQuery, setSearchQuery] = useState('');
   const [gameId, setGameId] = useState<string | null>(null);
 
-  const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot } = useNumberInput();
+  // Stable ref so the keyboard handler always calls the latest handleStart
+  const handleStartRef = useRef<() => void>(() => {});
+  const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot } = useNumberInput(4, {
+    enabled: !showFriendPicker,
+    onSubmit: () => handleStartRef.current(),
+  });
 
   const { data: searchResults = [] } = useQuery({
     queryKey: ['/api/search/users', searchQuery],
@@ -148,6 +153,9 @@ export default function GameSetup() {
     }
     createGameMutation.mutate();
   };
+
+  // Keep the ref pointing to the latest handleStart
+  handleStartRef.current = handleStart;
 
   const modeData = {
     ai: { icon: BotIcon, label: 'Practice (AI)', desc: 'Sharpen your skills', color: 'text-purple-400', bg: 'bg-purple-400/10' },
