@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -281,13 +281,13 @@ export function useNumberInput(maxLength: number = 4, options?: { enabled?: bool
   };
 
   const clearInput = () => {
-    if (currentSlot > 0) {
-      const newSlot = currentSlot - 1;
-      const newDigits = [...digits];
-      newDigits[newSlot] = '';
-      setDigits(newDigits);
-      setCurrentSlot(newSlot);
-    }
+    // Find the last filled slot - works correctly whether entry was via pad or keyboard
+    const lastFilled = digits.map((v, i) => v !== '' ? i : -1).filter(i => i !== -1).pop();
+    if (lastFilled === undefined) return; // nothing to erase
+    const newDigits = [...digits];
+    newDigits[lastFilled] = '';
+    setDigits(newDigits);
+    setCurrentSlot(lastFilled); // cursor goes back to the cleared slot
   };
 
   const randomNumber = () => {

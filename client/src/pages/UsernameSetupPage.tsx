@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -121,7 +121,7 @@ export default function UsernameSetupPage() {
               Choose Your Username
             </CardTitle>
             <CardDescription className="text-neutral-500 font-bold text-xs uppercase tracking-widest leading-relaxed px-6">
-               This is your public game name — visible on leaderboards and to friends
+               This is your public game name - visible on leaderboards and to friends
             </CardDescription>
           </CardHeader>
 

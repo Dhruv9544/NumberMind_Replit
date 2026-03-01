@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -104,7 +104,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        {/* Navbar is hidden on landing page — it has its own nav */}
+        {/* Navbar is hidden on landing page - it has its own nav */}
         <Navbar />
         <WebSocketProvider>
           <Router />

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+﻿import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation, useParams, Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,8 @@ import {
   CheckCircle2,
   CircleDashed,
   LogOut,
-  Gamepad2
+  Gamepad2,
+  HelpCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -61,6 +62,7 @@ interface GameState {
 }
 
 import { GameLoader } from '@/components/GameLoader';
+import { HowToPlayTour, resetTour } from '@/components/HowToPlayTour';
 
 export default function GamePlay() {
   const { user } = useAuth();
@@ -68,6 +70,7 @@ export default function GamePlay() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showWinDialog, setShowWinDialog] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot, reset } = useNumberInput(4, {
     enabled: true, // enabled globally; guard inside handleGuess handles turn/game-over
@@ -133,7 +136,9 @@ export default function GamePlay() {
   const opponentSecret = user?.id === game.player1Id ? game.player2Secret : game.player1Secret;
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] w-full bg-neutral-950 text-neutral-50 pb-12 font-sans selection:bg-emerald-500/30">
+    <div className="min-h-[calc(100vh-4rem)] w-full bg-neutral-950 text-neutral-50 pb-16 font-sans selection:bg-emerald-500/30 overflow-x-hidden">
+      {/* How to Play tour - shows first time automatically */}
+      <HowToPlayTour forceShow={showTour} onClose={() => setShowTour(false)} />
       {/* Background radial effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20">
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2" />
@@ -163,7 +168,15 @@ export default function GamePlay() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {/* Help button - re-opens the tutorial */}
+              <button
+                onClick={() => { resetTour(); setShowTour(true); }}
+                className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-colors group"
+                title="How to Play"
+              >
+                <HelpCircle className="w-4 h-4 text-neutral-500 group-hover:text-emerald-400 transition-colors" />
+              </button>
               <div className="flex -space-x-2">
                 <div className="w-9 h-9 rounded-full bg-neutral-800 border-2 border-neutral-950 flex items-center justify-center">
                   <UserIcon className="w-4 h-4 text-emerald-500" />
@@ -184,73 +197,65 @@ export default function GamePlay() {
           </div>
         </div>
 
-        <main className="max-w-5xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Game Board / Input */}
-          <div className="lg:col-span-12 xl:col-span-12">
-             {/* Turn Indicator Bar */}
-             <div className={cn(
-               "mb-8 p-3 rounded-xl border flex items-center justify-between transition-all duration-500",
-               isPlayerTurn 
-                 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300" 
-                 : "bg-blue-500/10 border-blue-500/20 text-blue-300"
-             )}>
-               <div className="flex items-center gap-3">
-                 {isPlayerTurn ? (
-                   <Zap className="w-5 h-5 fill-emerald-500 text-emerald-400 animate-pulse" />
-                 ) : (
-                   <CircleDashed className="w-5 h-5 text-blue-400 animate-spin" />
-                 )}
-                 <span className="font-bold text-sm tracking-wide uppercase">
-                   {isGameOver ? "Game Result" : (isPlayerTurn ? "Your Turn to Guess" : "Waiting for Opponent...")}
-                 </span>
-               </div>
-               
-               <div className="flex items-center gap-2">
-                 <Badge variant="outline" className={cn(
-                   "border-none px-2",
-                   isPlayerTurn ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"
-                 )}>
-                   #{playerMoves.length + opponentMoves.length + 1}
-                 </Badge>
-               </div>
-             </div>
+        {/* MAIN LAYOUT - single responsive column */}
+        <main className="max-w-2xl mx-auto px-3 sm:px-4 pb-4 space-y-4">
+          {/* Turn Indicator Bar */}
+          <div className={cn(
+            "p-3 rounded-xl border flex items-center justify-between transition-all duration-500",
+            isPlayerTurn
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+              : "bg-blue-500/10 border-blue-500/20 text-blue-300"
+          )}>
+            <div className="flex items-center gap-2">
+              {isPlayerTurn ? (
+                <Zap className="w-4 h-4 fill-emerald-500 text-emerald-400 animate-pulse" />
+              ) : (
+                <CircleDashed className="w-4 h-4 text-blue-400 animate-spin" />
+              )}
+              <span className="font-bold text-sm tracking-wide">
+                {isGameOver ? "Game Over" : (isPlayerTurn ? "Your Turn" : "Waiting for opponent...")}
+              </span>
+            </div>
+            <Badge variant="outline" className={cn(
+              "border-none px-2 text-[10px]",
+              isPlayerTurn ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"
+            )}>
+              Round #{playerMoves.length + opponentMoves.length + 1}
+            </Badge>
           </div>
-
-          {/* Player Areas */}
-          <div className="lg:col-span-8 flex flex-col gap-8">
             {/* Input Section */}
             {!isGameOver && (
-              <Card className="border-neutral-800 bg-neutral-900/50 backdrop-blur-sm shadow-xl overflow-hidden">
+            <Card className="border-neutral-800 bg-neutral-900/50 backdrop-blur-sm shadow-xl overflow-hidden mb-4">
                 <div className={cn(
                   "h-1 w-full",
                   isPlayerTurn ? "bg-emerald-500" : "bg-blue-500 opacity-30"
                 )} />
-                <CardHeader className="pb-4">
+                <CardHeader className="pb-3 pt-4 px-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Target className="w-5 h-5 text-emerald-500" />
-                        Next Guess
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Target className="w-4 h-4 text-emerald-500" />
+                        Your Guess
                       </CardTitle>
-                       <CardDescription className="text-neutral-400">
-                         Type digits or use the pad below · <kbd className="text-[10px] font-black bg-neutral-800 border border-neutral-700 rounded px-1 py-0.5 text-neutral-400">Enter</kbd> to submit
-                       </CardDescription>
+                      <CardDescription className="text-neutral-500 text-xs">
+                        Type digits or tap below · <kbd className="text-[10px] font-black bg-neutral-800 border border-neutral-700 rounded px-1 py-0.5 text-neutral-500">Enter</kbd> to submit
+                      </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-8">
-                  {/* Slots */}
-                  <div className="flex justify-center gap-2 sm:gap-4 p-4 rounded-2xl bg-black/20 border border-neutral-800/50">
+                <CardContent className="space-y-4 px-4 pb-4">
+                  {/* Digit slots - compact on mobile */}
+                  <div className="flex justify-center gap-2 p-3 rounded-2xl bg-black/20 border border-neutral-800/50">
                     {digits.map((d, i) => (
                       <motion.button
                         key={i}
-                        whileTap={{ scale: 0.95 }}
+                        whileTap={{ scale: 0.93 }}
                         disabled={!isPlayerTurn}
                         onClick={() => focusSlot(i)}
                         className={cn(
-                          "w-12 h-16 sm:w-16 sm:h-20 rounded-xl font-bold text-2xl sm:text-3xl transition-all flex items-center justify-center",
-                          d 
-                            ? "bg-neutral-800 text-white border-2 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.1)]" 
+                          "w-14 h-16 sm:w-16 sm:h-20 rounded-xl font-bold text-2xl sm:text-3xl transition-all flex items-center justify-center",
+                          d
+                            ? "bg-neutral-800 text-white border-2 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
                             : "bg-neutral-900 border-2 border-dashed border-neutral-800 text-neutral-600",
                           i === currentSlot && isPlayerTurn && "ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]",
                           !isPlayerTurn && "opacity-50 cursor-not-allowed"
@@ -261,49 +266,49 @@ export default function GamePlay() {
                     ))}
                   </div>
 
-                  {/* Keypad */}
-                  <div className="grid grid-cols-5 gap-2 max-w-sm mx-auto">
+                  {/* Numpad - 3+1 layout, full-width on mobile */}
+                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2 max-w-xs mx-auto">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => (
                       <Button
                         key={n}
                         variant="secondary"
                         disabled={!isPlayerTurn || makeMoveMutation.isPending}
                         onClick={() => inputDigit(n.toString())}
-                        className="h-12 border border-neutral-800 bg-neutral-800/50 hover:bg-neutral-800 hover:border-neutral-700 text-lg font-bold transition-all active:scale-90"
+                        className="h-11 sm:h-12 border border-neutral-800 bg-neutral-800/50 hover:bg-neutral-800 hover:border-neutral-700 text-base sm:text-lg font-bold transition-all active:scale-90"
                       >
                         {n}
                       </Button>
                     ))}
                   </div>
 
-                  {/* Keyboard hint */}
+                  {/* Keyboard hint - only on desktop */}
                   {isPlayerTurn && (
-                    <p className="text-center text-[10px] font-bold text-neutral-700 uppercase tracking-widest">
+                    <p className="text-center text-[10px] font-bold text-neutral-700 uppercase tracking-widest hidden sm:block">
                       ⌨ Type digits · Backspace to erase · Enter to submit
                     </p>
                   )}
                 </CardContent>
-                <CardFooter className="flex gap-4 p-6 bg-black/10 border-t border-neutral-800/50">
+                <CardFooter className="flex gap-3 p-4 bg-black/10 border-t border-neutral-800/50">
                   <Button
                     onClick={clearInput}
                     variant="outline"
                     disabled={!isPlayerTurn || makeMoveMutation.isPending}
-                    className="flex-1 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-white h-12 rounded-xl"
+                    className="flex-1 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-white h-11 rounded-xl"
                   >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Reset
+                    <RotateCcw className="w-4 h-4 mr-1.5" />
+                    Erase
                   </Button>
                   <Button
                     onClick={handleGuess}
                     disabled={!isPlayerTurn || !isComplete() || makeMoveMutation.isPending}
-                    className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-12 shadow-lg shadow-emerald-900/20 rounded-xl"
+                    className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-11 shadow-lg shadow-emerald-900/20 rounded-xl"
                   >
                     {makeMoveMutation.isPending ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                       <div className="flex items-center gap-2">
                         <Send className="w-4 h-4" />
-                        Submit Move
+                        Submit
                       </div>
                     )}
                   </Button>
@@ -311,8 +316,8 @@ export default function GamePlay() {
               </Card>
             )}
 
-            {/* ── GUESS HISTORY ─────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* ── GUESS HISTORY - stacked on mobile, side-by-side on sm+ ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
               {/* YOUR GUESSES */}
               <div className="flex flex-col">
@@ -327,7 +332,7 @@ export default function GamePlay() {
                   </span>
                 </div>
 
-                {/* Scroll container — scrollbar-gutter:stable pre-reserves scrollbar space
+                {/* Scroll container - scrollbar-gutter:stable pre-reserves scrollbar space
                     so the card width NEVER changes when the list grows */}
                 <div
                   style={{ scrollbarGutter: 'stable' }}
@@ -486,62 +491,6 @@ export default function GamePlay() {
               </div>
 
             </div>
-          </div>
-
-          {/* Right Column: Stats / Sidebar */}
-          <div className="lg:col-span-4 space-y-6">
-            <Card className="border-neutral-800 bg-neutral-900/30 backdrop-blur-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold text-neutral-300">Live Match Stats</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-black/20">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center">
-                      <Target className="w-4 h-4 text-emerald-500" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase font-bold text-neutral-500">Your Accuracy</p>
-                      <p className="font-bold tabular-nums">
-                        {playerMoves.length > 0 
-                          ? Math.round((playerMoves.reduce((acc, m) => acc + m.correctPositions, 0) / (playerMoves.length * 4)) * 100)
-                          : 0}%
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-3 rounded-lg bg-black/20">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center">
-                      <CircleDashed className="w-4 h-4 text-blue-500" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase font-bold text-neutral-500">Opponent Pace</p>
-                      <p className="font-bold tabular-nums">
-                        {opponentMoves.length > 0 ? (opponentMoves.length / (playerMoves.length + opponentMoves.length + 0.1)).toFixed(1) : 0} Moves/Rnd
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-neutral-800 bg-neutral-900/30 backdrop-blur-sm border-dashed">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3 mb-4">
-                   <ShieldCheck className="w-5 h-5 text-emerald-500" />
-                   <h3 className="font-bold text-sm">Game Security</h3>
-                </div>
-                <p className="text-xs text-neutral-500 leading-relaxed mb-4">
-                  Match is end-to-end verified. Your secret number is encrypted and only compared on move submission.
-                </p>
-                <div className="p-3 bg-neutral-950 rounded border border-neutral-800 text-[10px] font-mono text-emerald-500/50 break-all">
-                  HASH: {gameId?.repeat(2).slice(0, 32)}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </main>
       </div>
 

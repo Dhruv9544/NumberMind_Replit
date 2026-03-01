@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -152,7 +152,7 @@ export default function AuthPage() {
                 </CardTitle>
                 <CardDescription className="text-neutral-500 font-bold text-xs uppercase tracking-widest leading-relaxed">
                   {isLogin
-                    ? "Welcome back — enter your email and password"
+                    ? "Welcome back - enter your email and password"
                     : "Register a free account to start playing"}
                 </CardDescription>
               </motion.div>

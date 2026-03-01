@@ -1,10 +1,11 @@
-import { Link } from "wouter";
+﻿import { Link } from "wouter";
 import { motion, useInView } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { HowToPlayTour, resetTour } from "@/components/HowToPlayTour";
 import {
   Gamepad2,
   Brain,
@@ -167,8 +168,17 @@ function LandingNav() {
 // 1. HERO SECTION
 // ─────────────────────────────────────────────
 function HeroSection() {
+  const [showTour, setShowTour] = useState(false);
+
+  const openTour = () => {
+    resetTour(); // always show fresh from landing page
+    setShowTour(true);
+  };
+
   return (
-    <Section className="pt-24 pb-28 sm:pt-32 sm:pb-36 overflow-hidden">
+    <>
+      <HowToPlayTour forceShow={showTour} onClose={() => setShowTour(false)} />
+      <Section className="pt-24 pb-28 sm:pt-32 sm:pb-36 overflow-hidden">
       {/* Glows */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-emerald-500/5 rounded-full blur-[120px]" />
@@ -229,16 +239,16 @@ function HeroSection() {
                 <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
-            <a href="#how-it-works">
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-14 px-8 border-neutral-700 bg-transparent text-neutral-300 hover:bg-neutral-900 hover:text-white hover:border-neutral-500 font-semibold transition-all duration-300"
-              >
-                How It Works
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
-            </a>
+            {/* How to Play button - opens interactive tour on demand (never auto-pops) */}
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={openTour}
+              className="h-14 px-8 border-neutral-700 bg-transparent text-neutral-300 hover:bg-neutral-900 hover:text-white hover:border-emerald-500/50 font-semibold transition-all duration-300 group"
+            >
+              <Brain className="w-5 h-5 mr-2 text-emerald-400 group-hover:scale-110 transition-transform" />
+              How to Play
+            </Button>
           </div>
         </FadeIn>
 
@@ -247,7 +257,7 @@ function HeroSection() {
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8 text-xs text-neutral-500 font-medium">
             {[
               { icon: ShieldCheck, text: "No credit card needed" },
-              { icon: Zap, text: "Instant — no download" },
+              { icon: Zap, text: "Instant - no download" },
               { icon: Users, text: "Real opponents, real time" },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-1.5">
@@ -264,6 +274,7 @@ function HeroSection() {
         </FadeIn>
       </div>
     </Section>
+    </>
   );
 }
 
@@ -409,7 +420,7 @@ function HowItWorksSection() {
       description:
         "Pick a 4-digit number with all unique digits. Your opponent will spend the whole game trying to crack it.",
       color: "emerald",
-      detail: "E.g. 1, 3, 7, 9 — easy to set, hard to guess.",
+      detail: "E.g. 1, 3, 7, 9 - easy to set, hard to guess.",
     },
     {
       step: "02",
@@ -584,7 +595,7 @@ function BenefitsSection() {
       icon: Zap,
       title: "Fast & Addictive",
       description:
-        "Games last 3–10 minutes. One more game is always just a click away — perfectly optimized for flow state.",
+        "Games last 3–10 minutes. One more game is always just a click away - perfectly optimized for flow state.",
       color: "blue",
     },
   ];
@@ -644,7 +655,7 @@ function BenefitsSection() {
             Train Your <span className="text-cyan-400">Mind</span>
           </h2>
           <p className="text-neutral-400 max-w-lg mx-auto text-base">
-            NumberMind isn't just a game — it's a cognitive workout disguised as something you can't stop playing.
+            NumberMind isn't just a game - it's a cognitive workout disguised as something you can't stop playing.
           </p>
         </div>
       </FadeIn>
@@ -692,7 +703,7 @@ function MultiplayerSection() {
       icon: Users,
       title: "Challenge Friends",
       description:
-        "Send a direct challenge to a friend. Set your secret number and wait for them to accept — then battle it out in real time.",
+        "Send a direct challenge to a friend. Set your secret number and wait for them to accept - then battle it out in real time.",
       badge: "PvP",
       badgeColor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
       feature: ["Real-time turns", "Friend invite link", "Private match"],
@@ -701,7 +712,7 @@ function MultiplayerSection() {
       icon: Globe,
       title: "Random Matchmaking",
       description:
-        "Jump into the global queue and get matched with a real opponent instantly. No waiting, no frills — pure competition.",
+        "Jump into the global queue and get matched with a real opponent instantly. No waiting, no frills - pure competition.",
       badge: "Global",
       badgeColor: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
       feature: ["Instant match", "Skill-based queue", "Ranked games"],
@@ -996,7 +1007,7 @@ function CTASection() {
                   className="h-14 px-10 bg-emerald-600 hover:bg-emerald-500 text-white font-black italic uppercase tracking-wide text-base shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_60px_rgba(16,185,129,0.6)] transition-all duration-300 group"
                 >
                   <Zap className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform fill-white" />
-                  Start Playing — It's Free
+                  Start Playing - It's Free
                 </Button>
               </Link>
             </div>

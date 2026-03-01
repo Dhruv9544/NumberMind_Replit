@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation, Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -229,7 +229,7 @@ export default function GameSetup() {
                      <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
                         <span className="text-xl font-bold text-yellow-500">◆ Dig</span>
                         <p className="text-[10px] text-yellow-500 mt-1 uppercase font-bold">Common Digits</p>
-                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Total digits shared with the secret — <em>includes</em> Pos hits. Dig &ge; Pos always.</p>
+                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Total digits shared with the secret - <em>includes</em> Pos hits. Dig &ge; Pos always.</p>
                      </div>
                   </div>
 
