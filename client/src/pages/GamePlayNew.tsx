@@ -26,6 +26,7 @@ import {
   LogOut,
   Gamepad2,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -63,6 +64,7 @@ interface GameState {
 
 import { GameLoader } from '@/components/GameLoader';
 import { HowToPlayTour, resetTour } from '@/components/HowToPlayTour';
+import { useWebSocketContext } from '@/context/WebSocketContext';
 
 export default function GamePlay() {
   const { user } = useAuth();
@@ -70,7 +72,9 @@ export default function GamePlay() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showWinDialog, setShowWinDialog] = useState(false);
+  const [showOpponentLeftDialog, setShowOpponentLeftDialog] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [isForfeit, setIsForfeit] = useState(false);
 
   const { digits, currentSlot, inputDigit, clearInput, getValue, isComplete, focusSlot, reset } = useNumberInput(4, {
     enabled: true, // enabled globally; guard inside handleGuess handles turn/game-over
@@ -101,11 +105,47 @@ export default function GamePlay() {
     },
   });
 
+  const { sendMessage, lastMessage } = useWebSocketContext();
+
+  // Tell server which game this player is in (enables disconnect detection)
   useEffect(() => {
-    if (game?.status === 'finished' && !showWinDialog) {
+    if (!user?.id || !gameId) return;
+    sendMessage({ type: 'game:join', userId: user.id, gameId });
+    
+    return () => {
+      // If the user navigates away (e.g., to Profile or Home), it's treated as a forfeit/leave
+      // Requirement 2: Send explicit message on unmount
+      sendMessage({ 
+        type: 'game:leave', 
+        userId: user.id, 
+        gameId,
+        reason: 'navigation'
+      });
+    };
+  }, [user?.id, gameId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // React to opponent_left: immediately refetch so win dialog appears
+  useEffect(() => {
+    // Check both names for compatibility
+    if ((lastMessage?.type === 'game:opponent_left' || lastMessage?.type === 'opponent_left') && lastMessage?.gameId === gameId) {
+      setIsForfeit(true);
+      setShowOpponentLeftDialog(true);
+      refetch();
+    }
+  }, [lastMessage, gameId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLeaveMatch = () => {
+    if (confirm("Are you sure you want to leave? This will count as a defeat.")) {
+      sendMessage({ type: 'game:leave', userId: user?.id, gameId, reason: 'forfeit' });
+      setLocation('/');
+    }
+  };
+
+  useEffect(() => {
+    if (game?.status === 'finished' && !showWinDialog && !showOpponentLeftDialog) {
       setShowWinDialog(true);
     }
-  }, [game?.status]);
+  }, [game?.status, showOpponentLeftDialog]);
 
   // Define handleGuess with useCallback BEFORE passing it to useNumberInput
   const handleGuess = useCallback(() => {
@@ -177,6 +217,17 @@ export default function GamePlay() {
               >
                 <HelpCircle className="w-4 h-4 text-neutral-500 group-hover:text-emerald-400 transition-colors" />
               </button>
+              
+              {!isGameOver && (
+                <button
+                  onClick={handleLeaveMatch}
+                  className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-red-500/40 hover:bg-red-500/5 transition-colors group"
+                  title="Leave Match"
+                >
+                  <LogOut className="w-4 h-4 text-neutral-500 group-hover:text-red-400 transition-colors" />
+                </button>
+              )}
+
               <div className="flex -space-x-2">
                 <div className="w-9 h-9 rounded-full bg-neutral-800 border-2 border-neutral-950 flex items-center justify-center">
                   <UserIcon className="w-4 h-4 text-emerald-500" />
@@ -199,6 +250,21 @@ export default function GamePlay() {
 
         {/* MAIN LAYOUT - single responsive column */}
         <main className="max-w-2xl mx-auto px-3 sm:px-4 pb-4 space-y-4">
+
+          {/* Opponent left banner */}
+          <AnimatePresence>
+            {lastMessage?.type === 'opponent_left' && lastMessage?.gameId === gameId && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300"
+              >
+                <LogOut className="w-4 h-4 shrink-0 text-amber-400" />
+                <span className="font-bold text-sm">Your opponent left the game. You win by forfeit!</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Turn Indicator Bar */}
           <div className={cn(
             "p-3 rounded-xl border flex items-center justify-between transition-all duration-500",
@@ -213,7 +279,7 @@ export default function GamePlay() {
                 <CircleDashed className="w-4 h-4 text-blue-400 animate-spin" />
               )}
               <span className="font-bold text-sm tracking-wide">
-                {isGameOver ? "Game Over" : (isPlayerTurn ? "Your Turn" : "Waiting for opponent...")}
+                {isGameOver || showOpponentLeftDialog ? (showOpponentLeftDialog ? "Match Terminated" : "Game Over") : (isPlayerTurn ? "Your Turn" : "Waiting for opponent...")}
               </span>
             </div>
             <Badge variant="outline" className={cn(
@@ -250,15 +316,15 @@ export default function GamePlay() {
                       <motion.button
                         key={i}
                         whileTap={{ scale: 0.93 }}
-                        disabled={!isPlayerTurn}
+                        disabled={!isPlayerTurn || showOpponentLeftDialog}
                         onClick={() => focusSlot(i)}
                         className={cn(
                           "w-14 h-16 sm:w-16 sm:h-20 rounded-xl font-bold text-2xl sm:text-3xl transition-all flex items-center justify-center",
                           d
                             ? "bg-neutral-800 text-white border-2 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
                             : "bg-neutral-900 border-2 border-dashed border-neutral-800 text-neutral-600",
-                          i === currentSlot && isPlayerTurn && "ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]",
-                          !isPlayerTurn && "opacity-50 cursor-not-allowed"
+                          i === currentSlot && isPlayerTurn && !showOpponentLeftDialog && "ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]",
+                          (!isPlayerTurn || showOpponentLeftDialog) && "opacity-50 cursor-not-allowed"
                         )}
                       >
                         {d || '·'}
@@ -272,7 +338,7 @@ export default function GamePlay() {
                       <Button
                         key={n}
                         variant="secondary"
-                        disabled={!isPlayerTurn || makeMoveMutation.isPending}
+                        disabled={!isPlayerTurn || showOpponentLeftDialog || makeMoveMutation.isPending}
                         onClick={() => inputDigit(n.toString())}
                         className="h-11 sm:h-12 border border-neutral-800 bg-neutral-800/50 hover:bg-neutral-800 hover:border-neutral-700 text-base sm:text-lg font-bold transition-all active:scale-90"
                       >
@@ -502,12 +568,15 @@ export default function GamePlay() {
                {playerWon ? <Trophy className="w-10 h-10 text-emerald-500" /> : <Loader2 className="w-10 h-10 text-red-500" />}
             </div>
             <DialogTitle className="text-3xl font-black text-center">
-              {playerWon ? "Victory!" : "Defeat"}
+              {showOpponentLeftDialog ? "Victory by Forfeit!" : (playerWon ? "Victory!" : "Defeat")}
             </DialogTitle>
             <DialogDescription className="text-center text-neutral-400 pt-2 text-lg">
-              {playerWon 
-                ? "You've successfully cracked the code and outsmarted your opponent."
-                : "The opponent was faster this time. Your code was discovered."}
+              {showOpponentLeftDialog
+                ? "Your opponent has left the battlefield. You are the winner!"
+                : (playerWon 
+                    ? "You've successfully cracked the code and outsmarted your opponent."
+                    : "The opponent was faster this time. Your code was discovered.")
+              }
             </DialogDescription>
           </DialogHeader>
           
@@ -539,10 +608,36 @@ export default function GamePlay() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Opponent Left Dialog (Forfeit) */}
+      <Dialog open={showOpponentLeftDialog} onOpenChange={setShowOpponentLeftDialog}>
+        <DialogContent className="max-w-md border-neutral-800 bg-neutral-900 text-white shadow-2xl shadow-emerald-500/10">
+          <DialogHeader className="pt-4">
+            <div className="mx-auto w-24 h-24 rounded-full bg-emerald-500/10 flex items-center justify-center mb-6 relative">
+               <Trophy className="w-12 h-12 text-emerald-500" />
+               <motion.div 
+                 animate={{ scale: [1, 1.2, 1] }}
+                 transition={{ repeat: Infinity, duration: 2 }}
+                 className="absolute -top-1 -right-1 bg-neutral-900 p-1 rounded-full border border-neutral-800"
+               >
+                 <Sparkles className="w-5 h-5 text-emerald-400" />
+               </motion.div>
+            </div>
+            <DialogTitle className="text-3xl font-black text-center tracking-tight">Victory by Forfeit!</DialogTitle>
+            <DialogDescription className="text-center text-neutral-400 pt-3 text-lg leading-relaxed">
+              Your opponent has retreated from the battlefield. You have been declared the winner of this match.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mt-8 flex flex-col gap-3">
+             <Button 
+               onClick={() => setLocation('/')}
+               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black h-14 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all active:scale-95 text-lg"
+             >
+               Return to Lobby
+             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
-
-
-

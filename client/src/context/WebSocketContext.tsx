@@ -29,7 +29,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     if (!user?.id) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const wsUrl = `${protocol}//${window.location.host}/ws?userId=${user.id}`;
     
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
@@ -53,10 +53,28 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       switch (message.type) {
         case 'challenge_received':
           toast({
-            title: '🎮 Challenge Received!',
-            description: `${message.fromPlayerName} wants to play with you! Go to game lobby to accept.`,
-            duration: 30000, // 30 seconds
+            title: '⚔️ Challenge Received!',
+            description: `@${message.fromPlayerName || message.fromPlayerUsername} wants to play! Check Challenges to accept.`,
+            duration: 30000,
           });
+          break;
+
+        case 'challenge_declined':
+          toast({
+            title: '❌ Challenge Declined',
+            description: message.message || 'Your challenge was declined.',
+            variant: 'destructive',
+            duration: 6000,
+          });
+          break;
+
+        case 'opponent_left':
+          toast({
+            title: '🏆 Opponent Left',
+            description: message.message || 'Your opponent left. You win by forfeit!',
+            duration: 10000,
+          });
+          // lastMessage is set above — GamePlayNew will refetch and show win screen
           break;
 
         case 'match_found':

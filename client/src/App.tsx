@@ -21,6 +21,7 @@ import Leaderboard from "@/pages/Leaderboard";
 import Profile from "@/pages/Profile";
 import Notifications from "@/pages/Notifications";
 import HistoryPage from "@/pages/History";
+import FriendsPage from "@/pages/FriendsPage";
 
 function Router() {
   const [location, setLocation] = useLocation();
@@ -85,6 +86,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/friends" component={FriendsPage} />
       <Route path="/challenges" component={Challenges} />
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/profile/:userId" component={Profile} />

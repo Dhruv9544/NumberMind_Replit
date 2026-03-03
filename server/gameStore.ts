@@ -89,6 +89,7 @@ class GameStore {
   private friends = new Map<string, StoredFriend[]>();
   private notifications = new Map<string, StoredNotification[]>();
   private profiles = new Map<string, UserProfile>();
+  private userToGame = new Map<string, string>(); // userId -> gameId
   private storage?: DatabaseStorage;
 
   setStorage(storage: DatabaseStorage) {
@@ -197,6 +198,12 @@ class GameStore {
     const updated = { ...game, ...updates };
     this.games.set(id, updated);
 
+    // If game finished, clear mappings
+    if (updated.status === 'finished') {
+      if (updated.player1Id) this.userToGame.delete(updated.player1Id);
+      if (updated.player2Id) this.userToGame.delete(updated.player2Id);
+    }
+
     if (this.storage) {
       await this.storage.updateGame(id, {
         player2Id: updated.player2Id,
@@ -211,6 +218,70 @@ class GameStore {
     }
 
     return updated;
+  }
+
+  // Match Tracking (Architecture Req 7)
+  joinMatch(userId: string, gameId: string) {
+    this.userToGame.set(userId, gameId);
+  }
+
+  leaveMatch(userId: string) {
+    const gameId = this.userToGame.get(userId);
+    this.userToGame.delete(userId);
+    return gameId;
+  }
+
+  getGameForUser(userId: string) {
+    return this.userToGame.get(userId);
+  }
+
+  /** Find all non-finished games involving a specific user (active OR waiting). */
+  async getActiveGamesByUserId(userId: string): Promise<StoredGame[]> {
+    const results: StoredGame[] = [];
+
+    // 1. Check in-memory cache
+    for (const game of Array.from(this.games.values())) {
+      if (
+        (game.player1Id === userId || game.player2Id === userId) &&
+        (game.status === 'active' || game.status === 'waiting')
+      ) {
+        results.push(game);
+      }
+    }
+
+    // 2. Fallback to DB if we have storage and no cached games were found (or to be safe, always merge)
+    if (this.storage) {
+      try {
+        const dbGames = await this.storage.getActiveGamesByUserId(userId);
+        for (const dbGame of dbGames) {
+          // Only add if not already in results
+          if (!results.find(r => r.id === dbGame.id)) {
+            const storedGame: StoredGame = {
+              id: dbGame.id,
+              code: '', // Code is usually in-memory/transient or generated
+              player1Id: dbGame.player1Id,
+              player2Id: dbGame.player2Id || undefined,
+              player1Secret: dbGame.player1Secret || undefined,
+              player2Secret: dbGame.player2Secret || undefined,
+              gameMode: dbGame.gameMode,
+              difficulty: dbGame.difficulty || 'standard',
+              status: dbGame.status as any,
+              currentTurn: dbGame.currentTurn || undefined,
+              winnerId: dbGame.winnerId || undefined,
+              moves: [],
+              createdAt: dbGame.createdAt || new Date(),
+            };
+            results.push(storedGame);
+            // Cache it for subsequent lookups
+            this.games.set(dbGame.id, storedGame);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching active games from DB:', err);
+      }
+    }
+
+    return results;
   }
 
   async addMove(gameId: string, move: Omit<StoredMove, 'id' | 'createdAt'>): Promise<StoredMove> {

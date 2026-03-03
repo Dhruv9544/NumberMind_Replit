@@ -269,21 +269,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create challenge for friend mode
       if (gameMode === 'friend' && friendId && friendName) {
-        const userName = req.user.displayName || 'A player';
+        const senderUser = await storage.getUser(userId);
+        const senderDisplayName = senderUser?.username || senderUser?.firstName || 'A player';
         const challenge = await gameStore.createChallenge({
           gameId: game.id,
           fromPlayerId: userId,
           toPlayerId: friendId,
-          fromPlayerName: userName,
+          fromPlayerName: senderDisplayName,
           status: 'pending',
         });
 
-        // Broadcast challenge via WebSocket
+        // Broadcast challenge via WebSocket with proper sender name
         const challengeMsg = JSON.stringify({
           type: 'challenge_received',
           challenge,
           gameCode: game.code,
-          fromPlayerName: userName,
+          fromPlayerName: senderDisplayName,
+          fromPlayerUsername: senderDisplayName,
         });
         wss.clients.forEach((client: WSClient) => {
           if ((client as any).userId === friendId && client.readyState === WebSocket.OPEN) {
@@ -331,8 +333,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Game not found" });
       }
 
-      // Set player2 as the accepting player
+      // Set player2 as the accepting player and transition to active
       game.player2Id = userId;
+      game.status = 'active';
+      game.startedAt = new Date();
+      game.currentTurn = game.player1Id; // Player 1 (the challenger) starts
+
       await gameStore.updateGame(game.id, game);
       await gameStore.updateChallenge(challengeId, { status: 'accepted' });
 
@@ -359,6 +365,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await gameStore.updateChallenge(challengeId, { status: 'rejected' });
+
+      // Notify the challenger that their challenge was declined
+      const rejecter = await storage.getUser(userId);
+      const rejecterName = rejecter?.username || "Your opponent";
+      const declineMsg = JSON.stringify({
+        type: 'challenge_declined',
+        challengeId,
+        gameId: challenge.gameId,
+        declinedBy: rejecterName,
+        message: `${rejecterName} declined your challenge`,
+      });
+      wss.clients.forEach((client: WSClient) => {
+        if ((client as any).userId === challenge.fromPlayerId && client.readyState === WebSocket.OPEN) {
+          client.send(declineMsg);
+        }
+      });
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error rejecting challenge:", error);
@@ -394,23 +417,189 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Friends endpoints
+  // Friends endpoints - Production System
   app.get("/api/friends", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const friends = await gameStore.getFriends(userId);
-      res.json(friends);
+      const friendList = await storage.getFriendsList(userId);
+
+      // Attach online/in-game status from WS connections
+      const enriched = friendList.map(f => ({
+        id: f.id,
+        username: f.username,
+        profileImageUrl: f.profileImageUrl,
+        friendshipId: f.friendshipId,
+        online: Array.from(wss.clients).some((c: any) =>
+          c.userId === f.id && c.readyState === WebSocket.OPEN
+        ),
+      }));
+
+      res.json(enriched);
     } catch (error) {
       console.error("Error fetching friends:", error);
       res.status(500).json({ message: "Failed to fetch friends" });
     }
   });
 
+  app.get("/api/friends/requests", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const [incoming, outgoing] = await Promise.all([
+        storage.getIncomingFriendRequests(userId),
+        storage.getOutgoingFriendRequests(userId),
+      ]);
+      res.json({ incoming, outgoing });
+    } catch (error) {
+      console.error("Error fetching friend requests:", error);
+      res.status(500).json({ message: "Failed to fetch friend requests" });
+    }
+  });
+
+  app.post("/api/friends/request", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { username } = req.body;
+
+      if (!username?.trim()) {
+        return res.status(400).json({ message: "Username is required" });
+      }
+
+      const request = await storage.sendFriendRequest(userId, username.trim().replace(/^@/, ""));
+      res.json({ success: true, message: "Friend request sent!", request });
+    } catch (error: any) {
+      console.error("Error sending friend request:", error);
+      res.status(400).json({ message: error.message || "Failed to send friend request" });
+    }
+  });
+
+  app.post("/api/friends/accept", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { requestId } = req.body;
+
+      if (!requestId) return res.status(400).json({ message: "requestId is required" });
+
+      await storage.acceptFriendRequest(requestId, userId);
+      res.json({ success: true, message: "Friend request accepted!" });
+    } catch (error: any) {
+      console.error("Error accepting friend request:", error);
+      res.status(400).json({ message: error.message || "Failed to accept friend request" });
+    }
+  });
+
+  app.post("/api/friends/decline", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { requestId } = req.body;
+
+      if (!requestId) return res.status(400).json({ message: "requestId is required" });
+
+      await storage.declineFriendRequest(requestId, userId);
+      res.json({ success: true, message: "Friend request declined" });
+    } catch (error: any) {
+      console.error("Error declining friend request:", error);
+      res.status(400).json({ message: error.message || "Failed to decline friend request" });
+    }
+  });
+
+  app.post("/api/friends/cancel", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { requestId } = req.body;
+
+      if (!requestId) return res.status(400).json({ message: "requestId is required" });
+
+      await storage.cancelFriendRequest(requestId, userId);
+      res.json({ success: true, message: "Friend request cancelled" });
+    } catch (error: any) {
+      console.error("Error cancelling friend request:", error);
+      res.status(400).json({ message: error.message || "Failed to cancel friend request" });
+    }
+  });
+
+  app.delete("/api/friends/:username", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { username } = req.params;
+
+      await storage.removeFriend(userId, username);
+      res.json({ success: true, message: "Friend removed" });
+    } catch (error: any) {
+      console.error("Error removing friend:", error);
+      res.status(400).json({ message: error.message || "Failed to remove friend" });
+    }
+  });
+
+  app.post("/api/friends/challenge", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { username } = req.body;
+
+      if (!username?.trim()) {
+        return res.status(400).json({ message: "Username is required" });
+      }
+
+      const targetUser = await storage.getUserByUsername(username.trim().replace(/^@/, ""));
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      // Must be friends
+      const areFriends = await storage.areFriends(userId, targetUser.id);
+      if (!areFriends) return res.status(403).json({ message: "You can only challenge friends" });
+
+      // Check if target is online
+      const targetOnline = Array.from(wss.clients).some((c: any) =>
+        c.userId === targetUser.id && c.readyState === WebSocket.OPEN
+      );
+      if (!targetOnline) return res.status(400).json({ message: `${targetUser.username} is currently offline` });
+
+      // Get sender info for the notification
+      const sender = await storage.getUser(userId);
+      const senderName = sender?.username || "Someone";
+
+      // Create game
+      const game = await gameStore.createGame({
+        player1Id: userId,
+        player2Id: targetUser.id,
+        gameMode: "friend",
+        difficulty: "standard",
+        status: "waiting",
+      });
+
+      // Create challenge record
+      const challenge = await gameStore.createChallenge({
+        gameId: game.id,
+        fromPlayerId: userId,
+        toPlayerId: targetUser.id,
+        fromPlayerName: senderName,
+        status: "pending",
+      });
+
+      // Send real-time challenge to target via WebSocket
+      const msg = JSON.stringify({
+        type: "challenge_received",
+        challenge,
+        gameCode: game.code,
+        fromPlayerName: senderName,
+        fromPlayerUsername: senderName,
+      });
+      (wss.clients as Set<any>).forEach((client: any) => {
+        if (client.userId === targetUser.id && client.readyState === WebSocket.OPEN) {
+          client.send(msg);
+        }
+      });
+
+      res.json({ success: true, game, challenge });
+    } catch (error: any) {
+      console.error("Error sending challenge:", error);
+      res.status(500).json({ message: error.message || "Failed to send challenge" });
+    }
+  });
+
+  // Legacy: keep /api/friends/add for backward compat (old invite flow)
   app.post("/api/friends/add", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { friendId, friendName, friendEmail } = req.body;
-
       const friend = await gameStore.addFriend(userId, friendId, friendName, friendEmail);
       res.json(friend);
     } catch (error) {
@@ -423,7 +612,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       const { friendId } = req.params;
-
       await gameStore.acceptFriend(userId, friendId);
       res.json({ success: true });
     } catch (error) {
@@ -799,7 +987,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WebSocket server for real-time gameplay
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  wss.on('connection', (ws: WSClient) => {
+  wss.on('connection', (ws: WSClient, req: any) => {
+    // 1. Immediately identify from query string (replaces potentially raced 'identify' message)
+    try {
+      const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+      const userId = url.searchParams.get('userId');
+      if (userId) {
+        ws.userId = userId;
+        console.log(`✅ WebSocket identified via URL: userId=${userId}`);
+      }
+    } catch (err) {
+      console.warn('Failed to parse WS connection URL:', err);
+    }
+
     console.log('WebSocket client connected');
 
     ws.on('message', async (message: string) => {
@@ -808,14 +1008,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         switch (data.type) {
           case 'identify':
-            // Store userId for this connection globally
-            ws.userId = data.userId;
-            console.log(`✅ WebSocket identified: userId=${data.userId}`);
+            // Store fallback userId (kept for legacy/explicit sync)
+            if (data.userId) ws.userId = data.userId;
+            console.log(`✅ WebSocket identified via message: userId=${data.userId}`);
             break;
 
           case 'join_game':
+          case 'game:join':
             ws.userId = data.userId;
             ws.gameId = data.gameId;
+            if (ws.userId && ws.gameId) {
+              gameStore.joinMatch(ws.userId, ws.gameId);
+            }
 
             // Notify other players in the game
             wss.clients.forEach((client: WSClient) => {
@@ -858,14 +1062,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             });
             break;
+
+          case 'leave_game':
+          case 'game:leave':
+            // Explicitly ending participation in a match (Req 2 & 3)
+            const leaveUserId = data.userId || ws.userId;
+            const leaveGameId = data.gameId || ws.gameId;
+
+            if (leaveUserId && leaveGameId) {
+              const game = await gameStore.getGame(leaveGameId);
+              if (game && (game.status === 'active' || game.status === 'waiting')) {
+                const opponentId = game.player1Id === leaveUserId ? game.player2Id : game.player1Id;
+
+                // Stop game and mark abandoned
+                await gameStore.updateGame(game.id, {
+                  status: 'finished',
+                  winnerId: (opponentId && opponentId !== 'AI') ? opponentId : undefined,
+                  endedAt: new Date()
+                });
+
+                // Update Statistics for both players (Req: Ensure forfeit counts as win/loss)
+                if (leaveUserId) {
+                  await gameStore.getOrCreateProfile(leaveUserId, { name: 'Player', email: '', avatar: '' });
+                  await gameStore.updateStats(leaveUserId, game.id);
+                }
+
+                if (opponentId && opponentId !== 'AI') {
+                  await gameStore.getOrCreateProfile(opponentId, { name: 'Player', email: '', avatar: '' });
+                  await gameStore.updateStats(opponentId, game.id);
+
+                  // Notify opponent (Req 3 & 5)
+                  wss.clients.forEach((client: WSClient) => {
+                    if (client.userId === opponentId && client.readyState === WebSocket.OPEN) {
+                      client.send(JSON.stringify({
+                        type: 'game:opponent_left',
+                        gameId: game.id,
+                        reason: data.reason || 'navigation',
+                        message: 'Your opponent left the match.',
+                        winner: opponentId
+                      }));
+                    }
+                  });
+                }
+
+                // Clear match tracking
+                if (leaveUserId) gameStore.leaveMatch(leaveUserId);
+              }
+              // Clear current socket's game tracking
+              if (ws.userId === leaveUserId) ws.gameId = undefined;
+            }
+            break;
         }
       } catch (error) {
         console.error('WebSocket message error:', error);
       }
     });
 
-    ws.on('close', () => {
-      console.log('WebSocket client disconnected');
+    ws.on('close', async () => {
+      const { userId } = ws;
+      const wsGameId = ws.gameId;
+      console.log(`WebSocket disconnected: userId=${userId}, gameId=${wsGameId}`);
+
+      if (!userId) return;
+
+      // 1. Remove user from matchmaking queue if they are in it
+      const queueIdx = matchmakingQueue.findIndex(q => q.userId === userId);
+      if (queueIdx > -1) {
+        matchmakingQueue.splice(queueIdx, 1);
+        console.log(`Removed userId=${userId} from matchmakingQueue`);
+      }
+
+      // 2. Check for other active sockets for the same user (multi-tab or immediate refresh)
+      const hasOtherConnections = Array.from(wss.clients).some((client: any) =>
+        client !== ws && client.userId === userId && client.readyState === WebSocket.OPEN
+      );
+
+      if (hasOtherConnections) {
+        console.log(`User ${userId} still has active connections. Skipping forfeit.`);
+        return;
+      }
+
+      try {
+        // Primary: use ws.gameId if available; fallback: scan all active games by userId
+        let gamesToCheck: { id: string; player1Id: string; player2Id?: string; status: string; winnerId?: string }[] = [];
+
+        if (wsGameId) {
+          const g = await gameStore.getGame(wsGameId);
+          if (g) gamesToCheck = [g];
+        }
+
+        if (gamesToCheck.length === 0) {
+          gamesToCheck = await gameStore.getActiveGamesByUserId(userId);
+        }
+
+        for (const game of gamesToCheck) {
+          // Both active and waiting state games are valid to forfeit/finish
+          if (game.status !== 'active' && game.status !== 'waiting') continue;
+
+          const opponentId = game.player1Id === userId ? game.player2Id : game.player1Id;
+
+          // Clear match tracking
+          gameStore.leaveMatch(userId);
+
+          // If no second player ever joined, just mark game as finished/closed (no winner)
+          if (!opponentId || opponentId === 'AI') {
+            await gameStore.updateGame(game.id, { status: 'finished', endedAt: new Date() });
+            continue;
+          }
+
+          // Mark game finished — remaining player wins by forfeit
+          await gameStore.updateGame(game.id, {
+            status: 'finished',
+            winnerId: opponentId,
+            endedAt: new Date()
+          });
+
+          // Update stats for both (the one who disconnected and the one who stayed)
+          try {
+            await gameStore.getOrCreateProfile(userId, { name: 'Player', email: '', avatar: '' });
+            await gameStore.updateStats(userId, game.id);
+
+            await gameStore.getOrCreateProfile(opponentId, { name: 'Player', email: '', avatar: '' });
+            await gameStore.updateStats(opponentId, game.id);
+          } catch (statErr) {
+            console.error('Error updating stats on disconnect:', statErr);
+          }
+
+          // Notify the remaining player
+          wss.clients.forEach((client: WSClient) => {
+            if (client.userId === opponentId && client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({
+                type: 'game:opponent_left',
+                gameId: game.id,
+                message: 'Your opponent left the match.',
+                winner: opponentId
+              }));
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Error handling disconnect:', err);
+      }
     });
   });
 

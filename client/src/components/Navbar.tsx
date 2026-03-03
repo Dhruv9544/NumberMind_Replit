@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Gamepad2, LogOut, User, Trophy, Bell } from "lucide-react";
+import { Gamepad2, LogOut, User, Trophy, Bell, Users } from "lucide-react";
 
 export function Navbar() {
   const [, setLocation] = useLocation();
@@ -16,12 +16,11 @@ export function Navbar() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      // 1. Clear the cache
       queryClient.clear();
-      setLocation('/');
-      toast({
-        title: "Logged out",
-        description: "See you next time!",
-      });
+      // 2. Full refresh to "/" is the most reliable way to reset the app state on logout
+      // providing the "refresh" the user was doing manually
+      window.location.href = "/";
     } catch (error) {
       toast({
         title: "Error",
@@ -30,6 +29,14 @@ export function Navbar() {
       });
     }
   };
+
+  // Fetch pending friend requests count for badge
+  const { data: friendRequests } = useQuery<{ incoming: any[]; outgoing: any[] }>({
+    queryKey: ["/api/friends/requests"],
+    enabled: !!user,
+    refetchInterval: 15000,
+  });
+  const pendingCount = friendRequests?.incoming?.length ?? 0;
 
   if (!user) return null;
 
@@ -59,6 +66,15 @@ export function Navbar() {
               <Link href="/leaderboard" className="text-sm font-medium text-neutral-400 hover:text-emerald-400 transition-colors flex items-center gap-1">
                 <Trophy className="w-4 h-4" />
                 Leaderboard
+              </Link>
+              <Link href="/friends" className="relative text-sm font-medium text-neutral-400 hover:text-emerald-400 transition-colors flex items-center gap-1">
+                <Users className="w-4 h-4" />
+                Friends
+                {pendingCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2 w-4 h-4 bg-emerald-500 text-neutral-950 text-[9px] font-black rounded-full flex items-center justify-center">
+                    {pendingCount}
+                  </span>
+                )}
               </Link>
               <Link href="/notifications" className="relative text-sm font-medium text-neutral-400 hover:text-emerald-400 transition-colors flex items-center gap-1">
                 <Bell className="w-4 h-4" />

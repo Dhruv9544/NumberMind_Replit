@@ -4,6 +4,8 @@ import {
   gameSessions,
   gameMoves,
   friends,
+  friendRequests,
+  friendships,
   achievements,
   leaderboardStats,
   type User,
@@ -16,6 +18,8 @@ import {
   type InsertGameMove,
   type Friend,
   type InsertFriend,
+  type FriendRequest,
+  type Friendship,
   type Achievement,
   type InsertAchievement,
   type LeaderboardStats,
@@ -47,6 +51,7 @@ export interface IStorage {
   getGame(gameId: string): Promise<GameSession | undefined>;
   updateGame(gameId: string, updates: Partial<GameSession>): Promise<GameSession>;
   getUserGames(userId: string, limit?: number): Promise<GameSession[]>;
+  getActiveGamesByUserId(userId: string): Promise<GameSession[]>;
 
   // Game moves operations
   addGameMove(move: InsertGameMove): Promise<GameMove>;
@@ -95,7 +100,7 @@ export class MemStorage implements IStorage {
 
   async createUserWithPassword(data: { email: string; passwordHash: string; emailVerificationToken: string }): Promise<User> {
     const id = nanoid();
-    const user: User & { passwordHash?: string; emailVerificationToken?: string; emailVerified?: boolean } = {
+    const user: User = {
       id,
       email: data.email,
       passwordHash: data.passwordHash,
@@ -106,6 +111,8 @@ export class MemStorage implements IStorage {
       username: null,
       bio: null,
       profileImageUrl: null,
+      allowFriendRequests: true,
+      allowChallengesFrom: "everyone",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -163,6 +170,8 @@ export class MemStorage implements IStorage {
       username: (userData as any).username || null,
       bio: (userData as any).bio || null,
       profileImageUrl: userData.profileImageUrl || null,
+      allowFriendRequests: true,
+      allowChallengesFrom: "everyone",
       createdAt: (userData as any).createdAt || new Date(),
       updatedAt: new Date(),
     };
@@ -182,6 +191,8 @@ export class MemStorage implements IStorage {
       username: (userData as any).username || null,
       bio: (userData as any).bio || null,
       profileImageUrl: userData.profileImageUrl || null,
+      allowFriendRequests: true,
+      allowChallengesFrom: "everyone",
       createdAt: (userData as any).createdAt || new Date(),
       updatedAt: new Date(),
     };
@@ -250,6 +261,14 @@ export class MemStorage implements IStorage {
       .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
       .slice(0, limit);
     return games;
+  }
+
+  async getActiveGamesByUserId(userId: string): Promise<GameSession[]> {
+    return Array.from(this.gameSessions.values()).filter(
+      (game: GameSession) =>
+        (game.player1Id === userId || game.player2Id === userId) &&
+        (game.status === "active" || game.status === "waiting")
+    );
   }
 
   async addGameMove(move: InsertGameMove): Promise<GameMove> {
@@ -592,6 +611,18 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
+  async getActiveGamesByUserId(userId: string): Promise<GameSession[]> {
+    return await db
+      .select()
+      .from(gameSessions)
+      .where(
+        and(
+          or(eq(gameSessions.player1Id, userId), eq(gameSessions.player2Id, userId)),
+          or(eq(gameSessions.status, "active"), eq(gameSessions.status, "waiting"))
+        )
+      );
+  }
+
   async addGameMove(move: InsertGameMove): Promise<GameMove> {
     const id = nanoid();
     await db.insert(gameMoves).values({
@@ -638,6 +669,197 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     return result[0]!;
   }
+
+  // ── New Friend Request System ─────────────────────────────────────
+
+  async sendFriendRequest(senderId: string, receiverUsername: string): Promise<FriendRequest> {
+    // Resolve username -> id
+    const receiver = await this.getUserByUsername(receiverUsername);
+    if (!receiver) throw new Error("User not found");
+    if (!receiver.allowFriendRequests) throw new Error("This user is not accepting friend requests");
+    if (receiver.id === senderId) throw new Error("You cannot send a friend request to yourself");
+
+    // Check privacy setting
+    const sender = await this.getUser(senderId);
+    if (!sender) throw new Error("Sender not found");
+
+    // Check if already friends
+    const alreadyFriends = await this.areFriends(senderId, receiver.id);
+    if (alreadyFriends) throw new Error("You are already friends with this user");
+
+    // Check if request already exists
+    const existing = await db
+      .select()
+      .from(friendRequests)
+      .where(
+        and(
+          eq(friendRequests.senderId, senderId),
+          eq(friendRequests.receiverId, receiver.id),
+          eq(friendRequests.status, "pending")
+        )
+      )
+      .limit(1);
+    if (existing.length > 0) throw new Error("You already sent a friend request to this user");
+
+    // Check reverse request (they already sent one to us)
+    const reverseExisting = await db
+      .select()
+      .from(friendRequests)
+      .where(
+        and(
+          eq(friendRequests.senderId, receiver.id),
+          eq(friendRequests.receiverId, senderId),
+          eq(friendRequests.status, "pending")
+        )
+      )
+      .limit(1);
+    if (reverseExisting.length > 0) throw new Error("This user already sent you a friend request. Accept it instead!");
+
+    // Rate limit: max 10 pending outgoing
+    const outgoing = await db
+      .select()
+      .from(friendRequests)
+      .where(and(eq(friendRequests.senderId, senderId), eq(friendRequests.status, "pending")));
+    if (outgoing.length >= 10) throw new Error("You have too many pending friend requests (max 10). Cancel some first.");
+
+    const id = nanoid();
+    await db.insert(friendRequests).values({
+      id,
+      senderId,
+      receiverId: receiver.id,
+      status: "pending",
+    });
+    const result = await db.select().from(friendRequests).where(eq(friendRequests.id, id)).limit(1);
+    return result[0]!;
+  }
+
+  async getIncomingFriendRequests(userId: string): Promise<(FriendRequest & { sender: Pick<User, 'id' | 'username' | 'profileImageUrl'> })[]> {
+    const results = await db
+      .select({
+        id: friendRequests.id,
+        senderId: friendRequests.senderId,
+        receiverId: friendRequests.receiverId,
+        status: friendRequests.status,
+        createdAt: friendRequests.createdAt,
+        updatedAt: friendRequests.updatedAt,
+        sender: {
+          id: users.id,
+          username: users.username,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
+      .from(friendRequests)
+      .innerJoin(users, eq(friendRequests.senderId, users.id))
+      .where(and(eq(friendRequests.receiverId, userId), eq(friendRequests.status, "pending")))
+      .orderBy(desc(friendRequests.createdAt));
+    return results as any;
+  }
+
+  async getOutgoingFriendRequests(userId: string): Promise<(FriendRequest & { receiver: Pick<User, 'id' | 'username' | 'profileImageUrl'> })[]> {
+    const results = await db
+      .select({
+        id: friendRequests.id,
+        senderId: friendRequests.senderId,
+        receiverId: friendRequests.receiverId,
+        status: friendRequests.status,
+        createdAt: friendRequests.createdAt,
+        updatedAt: friendRequests.updatedAt,
+        receiver: {
+          id: users.id,
+          username: users.username,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
+      .from(friendRequests)
+      .innerJoin(users, eq(friendRequests.receiverId, users.id))
+      .where(and(eq(friendRequests.senderId, userId), eq(friendRequests.status, "pending")))
+      .orderBy(desc(friendRequests.createdAt));
+    return results as any;
+  }
+
+  async acceptFriendRequest(requestId: string, acceptorId: string): Promise<void> {
+    const req = await db.select().from(friendRequests).where(eq(friendRequests.id, requestId)).limit(1);
+    if (!req[0]) throw new Error("Friend request not found");
+    if (req[0].receiverId !== acceptorId) throw new Error("Not authorized");
+    if (req[0].status !== "pending") throw new Error("Request is no longer pending");
+
+    const { senderId, receiverId } = req[0];
+
+    // Sort IDs for the unique constraint
+    const [user1Id, user2Id] = senderId < receiverId ? [senderId, receiverId] : [receiverId, senderId];
+
+    // Transaction: create friendship + update request
+    await db.transaction(async (tx) => {
+      await tx.insert(friendships).values({
+        id: nanoid(),
+        user1Id,
+        user2Id,
+      }).onConflictDoNothing();
+
+      await tx.update(friendRequests)
+        .set({ status: "accepted" })
+        .where(eq(friendRequests.id, requestId));
+    });
+  }
+
+  async declineFriendRequest(requestId: string, declinerId: string): Promise<void> {
+    const req = await db.select().from(friendRequests).where(eq(friendRequests.id, requestId)).limit(1);
+    if (!req[0]) throw new Error("Friend request not found");
+    if (req[0].receiverId !== declinerId) throw new Error("Not authorized");
+    await db.update(friendRequests).set({ status: "declined" }).where(eq(friendRequests.id, requestId));
+  }
+
+  async cancelFriendRequest(requestId: string, cancellerId: string): Promise<void> {
+    const req = await db.select().from(friendRequests).where(eq(friendRequests.id, requestId)).limit(1);
+    if (!req[0]) throw new Error("Friend request not found");
+    if (req[0].senderId !== cancellerId) throw new Error("Not authorized");
+    await db.update(friendRequests).set({ status: "cancelled" }).where(eq(friendRequests.id, requestId));
+  }
+
+  async getFriendsList(userId: string): Promise<(User & { friendshipId: string })[]> {
+    const rows = await db
+      .select({
+        friendshipId: friendships.id,
+        user: users,
+      })
+      .from(friendships)
+      .innerJoin(
+        users,
+        or(
+          and(eq(friendships.user1Id, userId), eq(users.id, friendships.user2Id)),
+          and(eq(friendships.user2Id, userId), eq(users.id, friendships.user1Id))
+        )
+      )
+      .where(or(eq(friendships.user1Id, userId), eq(friendships.user2Id, userId)))
+      .orderBy(users.username);
+
+    return rows.map(r => ({ ...r.user, friendshipId: r.friendshipId }));
+  }
+
+  async removeFriend(currentUserId: string, targetUsername: string): Promise<void> {
+    const target = await this.getUserByUsername(targetUsername);
+    if (!target) throw new Error("User not found");
+
+    const [user1Id, user2Id] = currentUserId < target.id
+      ? [currentUserId, target.id]
+      : [target.id, currentUserId];
+
+    await db.delete(friendships).where(
+      and(eq(friendships.user1Id, user1Id), eq(friendships.user2Id, user2Id))
+    );
+  }
+
+  async areFriends(userAId: string, userBId: string): Promise<boolean> {
+    const [user1Id, user2Id] = userAId < userBId ? [userAId, userBId] : [userBId, userAId];
+    const result = await db
+      .select({ id: friendships.id })
+      .from(friendships)
+      .where(and(eq(friendships.user1Id, user1Id), eq(friendships.user2Id, user2Id)))
+      .limit(1);
+    return result.length > 0;
+  }
+
+  // ── Legacy methods kept for backward compat ───────────────────────
 
   async getFriends(userId: string): Promise<User[]> {
     const friendships = await db

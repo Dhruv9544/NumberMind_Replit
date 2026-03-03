@@ -73,16 +73,28 @@ export default function GameSetup() {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
     const id = params.get('gameId');
+    const opponent = params.get('opponent'); // username of challenged friend
     if (mode) setGameMode(mode || 'ai');
     if (id) setGameId(id);
+    // If arriving from Friends page challenge (gameId already created),
+    // pre-select the opponent so the button is enabled
+    if (id && opponent) {
+      setSelectedFriend({ id: '_pre_challenged', name: opponent });
+    } else if (id && mode === 'friend') {
+      // gameId exists but no opponent — still unlock the button
+      setSelectedFriend({ id: '_pre_challenged', name: 'Your friend' });
+    }
   }, []);
 
   const createGameMutation = useMutation({
     mutationFn: async () => {
+      // If we already have a gameId (came from Friends challenge), skip creation
+      if (gameId) {
+        return { id: gameId };
+      }
       if (gameMode === 'friend' && !selectedFriend) {
         throw new Error('Please select a friend to challenge');
       }
-      
       const response = await apiRequest('POST', '/api/games', { 
         gameMode,
         difficulty: 'standard',
@@ -133,15 +145,17 @@ export default function GameSetup() {
   });
 
   const handleStart = () => {
-    if (gameMode === 'join' && gameId) {
+    // Case 1: joining via pre-existing gameId (friend challenge from Friends page)
+    if (gameId) {
       if (!isComplete()) {
-        toast({ title: 'Invalid Number', description: 'Enter your 4-digit secret', variant: 'destructive' });
+        toast({ title: 'Set Your Secret', description: 'Enter your 4-digit secret number first', variant: 'destructive' });
         return;
       }
       setSecretMutation.mutate({ gameId, secretNumber: getValue() });
       return;
     }
 
+    // Case 2: friend mode via search picker
     if (gameMode === 'friend' && !selectedFriend) {
       toast({ title: 'Select a Player', description: 'Search and select an opponent', variant: 'destructive' });
       return;
@@ -268,61 +282,94 @@ export default function GameSetup() {
           {/* Social Picker if Friend Mode */}
           {gameMode === 'friend' && (
             <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black tracking-widest text-neutral-500 px-1">Opponent Details</label>
-              <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 group-focus-within:text-emerald-500 transition-colors" />
-                <Input 
-                  placeholder="Search player username..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setShowFriendPicker(true);
-                  }}
-                  className="pl-12 h-14 bg-neutral-900 border-neutral-800 rounded-2xl focus-visible:ring-emerald-500/20 focus-visible:border-emerald-500 transition-all font-medium"
-                />
-                
-                <AnimatePresence>
-                  {showFriendPicker && searchQuery.length >= 2 && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute top-full left-0 w-full mt-2 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto custom-scrollbar"
-                    >
-                      {searchResults.length > 0 ? (
-                        <div className="p-2 space-y-1">
-                          {searchResults.map((p: any) => (
-                            <button
-                              key={p.id}
-                              onClick={() => {
-                                setSelectedFriend({ id: p.id, name: p.username });
-                                setShowFriendPicker(false);
-                                setSearchQuery(p.username);
-                              }}
-                              className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-neutral-800 transition-colors group text-left"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center">
-                                   <UserIcon className="w-4 h-4 text-neutral-400 group-hover:text-emerald-500 transition-colors" />
-                                </div>
-                                <div>
-                                  <p className="font-bold text-sm text-neutral-200">@{p.username}</p>
-                                  <p className="text-[10px] text-neutral-500 uppercase tracking-tighter">Verified Player</p>
-                                </div>
-                              </div>
-                              <ChevronRight className="w-4 h-4 text-neutral-600 group-hover:text-emerald-500" />
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-8 text-center">
-                          <p className="text-sm text-neutral-500 italic">No threats found with that name.</p>
-                        </div>
+              {gameId ? (
+                /* Came from Friends page - game already created, just show who we challenged */
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-600 to-cyan-600 flex items-center justify-center text-white font-black text-base shrink-0">
+                    {selectedFriend?.name?.[0]?.toUpperCase() ?? '?'}
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-neutral-500 mb-0.5">Challenging</p>
+                    <p className="font-black text-white text-base">@{selectedFriend?.name ?? 'your friend'}</p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5 text-[10px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    Challenge Sent
+                  </div>
+                </div>
+              ) : (
+                /* No gameId - show search picker */
+                <div>
+                  <label className="text-[10px] uppercase font-black tracking-widest text-neutral-500 px-1 mb-2 block">Opponent Details</label>
+                  <div className="relative group">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 group-focus-within:text-emerald-500 transition-colors" />
+                    <Input 
+                      placeholder="Search player username..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setShowFriendPicker(true);
+                      }}
+                      className="pl-12 h-14 bg-neutral-900 border-neutral-800 rounded-2xl focus-visible:ring-emerald-500/20 focus-visible:border-emerald-500 transition-all font-medium"
+                    />
+                    
+                    <AnimatePresence>
+                      {showFriendPicker && searchQuery.length >= 2 && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute top-full left-0 w-full mt-2 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-60 overflow-y-auto"
+                        >
+                          {searchResults.length > 0 ? (
+                            <div className="p-2 space-y-1">
+                              {searchResults.map((p: any) => (
+                                <button
+                                  key={p.id}
+                                  onClick={() => {
+                                    setSelectedFriend({ id: p.id, name: p.username });
+                                    setShowFriendPicker(false);
+                                    setSearchQuery(p.username);
+                                  }}
+                                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-neutral-800 transition-colors group text-left"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center">
+                                       <UserIcon className="w-4 h-4 text-neutral-400 group-hover:text-emerald-500 transition-colors" />
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-sm text-neutral-200">@{p.username}</p>
+                                      <p className="text-[10px] text-neutral-500 uppercase tracking-tighter">Verified Player</p>
+                                    </div>
+                                  </div>
+                                  <ChevronRight className="w-4 h-4 text-neutral-600 group-hover:text-emerald-500" />
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center">
+                              <p className="text-sm text-neutral-500 italic">No threats found with that name.</p>
+                            </div>
+                          )}
+                        </motion.div>
                       )}
-                    </motion.div>
+                    </AnimatePresence>
+                  </div>
+                  {selectedFriend && (
+                    <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                      <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                      <span className="text-sm font-bold text-emerald-400">@{selectedFriend.name}</span>
+                      <span className="text-xs text-neutral-500">selected</span>
+                      <button
+                        onClick={() => { setSelectedFriend(null); setSearchQuery(''); }}
+                        className="ml-auto text-neutral-500 hover:text-neutral-300"
+                      >
+                        <span className="text-xs">✕</span>
+                      </button>
+                    </div>
                   )}
-                </AnimatePresence>
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -382,7 +429,12 @@ export default function GameSetup() {
                  </Button>
                  <Button
                     onClick={handleStart}
-                    disabled={!isComplete() || isLoading || (gameMode === 'friend' && !selectedFriend)}
+                    disabled={
+                      !isComplete() ||
+                      isLoading ||
+                      // Only require selectedFriend when no pre-existing gameId
+                      (gameMode === 'friend' && !gameId && !selectedFriend)
+                    }
                     className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white font-black italic uppercase tracking-wider h-12 rounded-xl shadow-lg shadow-emerald-500/10"
                  >
                     {isLoading ? (

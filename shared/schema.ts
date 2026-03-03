@@ -36,6 +36,8 @@ export const users = pgTable("users", {
   username: varchar("username").unique(),
   bio: text("bio"),
   profileImageUrl: varchar("profile_image_url"),
+  allowFriendRequests: boolean("allow_friend_requests").default(true),
+  allowChallengesFrom: varchar("allow_challenges_from").default("everyone"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -82,12 +84,30 @@ export const gameMoves = pgTable("game_moves", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Friends table
+// Friends table (legacy)
 export const friends = pgTable("friends", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   friendId: varchar("friend_id").notNull().references(() => users.id),
-  status: varchar("status").notNull().default("pending"), // pending, accepted, blocked
+  status: varchar("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Friend requests table (production model)
+export const friendRequests = pgTable("friend_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  receiverId: varchar("receiver_id").notNull().references(() => users.id),
+  status: varchar("status").notNull().default("pending"), // pending | accepted | declined | cancelled
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Friendships table (mutual, one row per pair, user1_id < user2_id)
+export const friendships = pgTable("friendships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  user1Id: varchar("user1_id").notNull().references(() => users.id),
+  user2Id: varchar("user2_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -123,6 +143,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   moves: many(gameMoves),
   friends: many(friends, { relationName: "userFriends" }),
   friendOf: many(friends, { relationName: "friendOf" }),
+  sentFriendRequests: many(friendRequests, { relationName: "sentRequests" }),
+  receivedFriendRequests: many(friendRequests, { relationName: "receivedRequests" }),
 }));
 
 export const userStatsRelations = relations(userStats, ({ one }) => ({
@@ -171,6 +193,19 @@ export const friendsRelations = relations(friends, ({ one }) => ({
     fields: [friends.friendId],
     references: [users.id],
     relationName: "friendOf",
+  }),
+}));
+
+export const friendRequestsRelations = relations(friendRequests, ({ one }) => ({
+  sender: one(users, {
+    fields: [friendRequests.senderId],
+    references: [users.id],
+    relationName: "sentRequests",
+  }),
+  receiver: one(users, {
+    fields: [friendRequests.receiverId],
+    references: [users.id],
+    relationName: "receivedRequests",
   }),
 }));
 
@@ -252,7 +287,10 @@ export type GameMove = typeof gameMoves.$inferSelect;
 export type InsertGameMove = z.infer<typeof insertGameMoveSchema>;
 export type Friend = typeof friends.$inferSelect;
 export type InsertFriend = z.infer<typeof insertFriendSchema>;
+export type FriendRequest = typeof friendRequests.$inferSelect;
+export type Friendship = typeof friendships.$inferSelect;
 export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = z.infer<typeof insertAchievementSchema>;
 export type LeaderboardStats = typeof leaderboardStats.$inferSelect;
 export type InsertLeaderboardStats = z.infer<typeof insertLeaderboardStatsSchema>;
+

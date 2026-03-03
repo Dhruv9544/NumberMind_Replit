@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS game_moves (
   created_at TIMESTAMP DEFAULT now()
 );
 
--- Friends table
+-- Friends table (legacy, kept for compatibility)
 CREATE TABLE IF NOT EXISTS friends (
   id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id VARCHAR NOT NULL REFERENCES users(id),
@@ -76,6 +76,32 @@ CREATE TABLE IF NOT EXISTS friends (
   status VARCHAR NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT now()
 );
+
+-- Friend requests table (production model)
+CREATE TABLE IF NOT EXISTS friend_requests (
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_id VARCHAR NOT NULL REFERENCES users(id),
+  receiver_id VARCHAR NOT NULL REFERENCES users(id),
+  status VARCHAR NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_friend_requests_sender ON friend_requests(sender_id);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_friend_requests_pair ON friend_requests(sender_id, receiver_id);
+
+-- Friendships table (mutual, one row per pair, always user1_id < user2_id)
+CREATE TABLE IF NOT EXISTS friendships (
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+  user1_id VARCHAR NOT NULL REFERENCES users(id),
+  user2_id VARCHAR NOT NULL REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_friendships_user1 ON friendships(user1_id);
+CREATE INDEX IF NOT EXISTS idx_friendships_user2 ON friendships(user2_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_friendships_pair ON friendships(user1_id, user2_id);
 
 -- Achievements table
 CREATE TABLE IF NOT EXISTS achievements (
@@ -111,6 +137,8 @@ const ALTER_MIGRATIONS = [
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR`,
   `ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS fastest_win_seconds INTEGER`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS allow_friend_requests BOOLEAN DEFAULT true`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS allow_challenges_from VARCHAR DEFAULT 'everyone'`,
 ];
 
 export async function runMigrations(): Promise<void> {
