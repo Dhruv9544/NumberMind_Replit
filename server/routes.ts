@@ -24,6 +24,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Inject storage into gameStore for database persistence
   gameStore.setStorage(storage);
 
+  // Health check endpoint for Render/deployment
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', service: 'NumberMind-API', timestamp: new Date().toISOString() });
+  });
+
   // Auth routes
   app.post('/api/auth/signup', async (req: any, res) => {
     try {
