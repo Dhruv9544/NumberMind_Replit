@@ -145,10 +145,17 @@ export default function GameSetup() {
   });
 
   const handleStart = () => {
+    // Helper: check for duplicate digits
+    const hasDuplicateDigits = (num: string) => new Set(num.split('')).size !== num.length;
+
     // Case 1: joining via pre-existing gameId (friend challenge from Friends page)
     if (gameId) {
       if (!isComplete()) {
         toast({ title: 'Set Your Secret', description: 'Enter your 4-digit secret number first', variant: 'destructive' });
+        return;
+      }
+      if (hasDuplicateDigits(getValue())) {
+        toast({ title: 'Invalid Number', description: 'All 4 digits must be unique — no repeated digits allowed.', variant: 'destructive' });
         return;
       }
       setSecretMutation.mutate({ gameId, secretNumber: getValue() });
@@ -165,6 +172,13 @@ export default function GameSetup() {
       toast({ title: 'Invalid Number', description: 'Set your 4-digit secret number', variant: 'destructive' });
       return;
     }
+
+    // Validate unique digits before creating/sending any challenge
+    if (hasDuplicateDigits(getValue())) {
+      toast({ title: 'Invalid Number', description: 'All 4 digits must be unique — no repeated digits allowed.', variant: 'destructive' });
+      return;
+    }
+
     createGameMutation.mutate();
   };
 

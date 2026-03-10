@@ -10,6 +10,8 @@ import { GameLoader } from "@/components/GameLoader";
 import { WebSocketProvider } from "@/context/WebSocketContext";
 import LandingPage from "@/pages/Landing";
 import AuthPage from "@/pages/AuthPage";
+import ForgotPasswordPage from "@/pages/ForgotPassword";
+import ResetPasswordPage from "@/pages/ResetPassword";
 import UsernameSetupPage from "@/pages/UsernameSetupPage";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
@@ -35,23 +37,27 @@ function Router() {
   useEffect(() => {
     if (isLoading) return;
 
+    // Public auth routes that are always allowed without a session
+    const publicAuthRoutes = ['/', '/auth', '/auth/forgot-password', '/auth/reset-password'];
+    const isPublicRoute = publicAuthRoutes.some(r => location === r || location.startsWith('/auth/reset-password'));
+
     if (!user) {
-      // Unauthenticated: only allow landing and auth pages
-      if (location !== "/" && location !== "/auth") {
-        setLocation("/");
+      // Unauthenticated: only allow public auth pages
+      if (!isPublicRoute) {
+        setLocation('/');
       }
     } else if (user && !user.usernameSet) {
       // Authenticated but no username yet
-      if (location !== "/setup-username") {
-        setLocation("/setup-username");
+      if (location !== '/setup-username') {
+        setLocation('/setup-username');
       }
     } else if (user && user.usernameSet) {
       // Fully authenticated: kick away from landing/auth/setup pages
       if (
-        location === "/auth" ||
-        location === "/setup-username"
+        location === '/auth' ||
+        location === '/setup-username'
       ) {
-        setLocation("/");
+        setLocation('/');
       }
     }
   }, [user, isLoading, location, setLocation]);
@@ -67,6 +73,8 @@ function Router() {
       <Switch>
         <Route path="/" component={LandingPage} />
         <Route path="/auth" component={AuthPage} />
+        <Route path="/auth/forgot-password" component={ForgotPasswordPage} />
+        <Route path="/auth/reset-password" component={ResetPasswordPage} />
         <Route component={LandingPage} />
       </Switch>
     );

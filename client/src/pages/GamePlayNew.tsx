@@ -601,9 +601,17 @@ export default function GamePlay() {
             </Button>
             <Button 
               className="w-full bg-emerald-600 hover:bg-emerald-500 py-6 text-lg font-bold"
-              onClick={() => setLocation('/game/setup')}
+              onClick={() => {
+                // For friend/multiplayer matches, go back to dashboard (lobby)
+                // For AI games, allow direct rematch via game setup
+                if (game?.gameMode === 'friend' || game?.gameMode === 'random') {
+                  setLocation('/');
+                } else {
+                  setLocation('/game/setup');
+                }
+              }}
             >
-              Play Again
+              {game?.gameMode === 'friend' || game?.gameMode === 'random' ? 'Return to Lobby' : 'Play Again'}
             </Button>
           </DialogFooter>
         </DialogContent>

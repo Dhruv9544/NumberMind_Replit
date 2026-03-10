@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/hooks/useAuth';
-import { useLocation } from 'wouter';
+import { useLocation, Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -268,6 +268,15 @@ export default function AuthPage() {
                   {loginForm.formState.errors.password && (
                     <p className="text-red-500 text-sm mt-1">{loginForm.formState.errors.password.message}</p>
                   )}
+                  {/* Forgot Password link */}
+                  <div className="flex justify-end mt-1">
+                    <Link
+                      href="/auth/forgot-password"
+                      className="text-xs text-purple-400 hover:text-purple-200 transition-colors"
+                    >
+                      Forgot Password?
+                    </Link>
+                  </div>
                 </div>
                 <Button
                   type="submit"

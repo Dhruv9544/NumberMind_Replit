@@ -80,3 +80,4 @@ App is production-ready:
 - Real data from PostgreSQL
 - Can be published immediately
 
+resend api key : re_RXKjnTwS_Je7iAZMB3fVR23HJNxjE9j7r

@@ -222,6 +222,17 @@ export default function AuthPage() {
                 {errors.password && (
                   <motion.p initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className="text-[10px] font-black uppercase text-red-500 pl-4">{errors.password}</motion.p>
                 )}
+                {/* Forgot Password — only show on login tab */}
+                {isLogin && (
+                  <div className="flex justify-end pt-1 pr-1">
+                    <Link
+                      href="/auth/forgot-password"
+                      className="text-[11px] font-bold text-neutral-500 hover:text-emerald-400 uppercase tracking-widest transition-colors"
+                    >
+                      Forgot Password?
+                    </Link>
+                  </div>
+                )}
               </div>
 
               <Button

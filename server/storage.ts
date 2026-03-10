@@ -38,6 +38,7 @@ export interface IStorage {
   upsertUserWithId(id: string, user: UpsertUser): Promise<User>;
   createUserWithPassword(data: { email: string; passwordHash: string; emailVerificationToken: string }): Promise<User>;
   verifyUserEmail(userId: string): Promise<void>;
+  updateUserPassword(userId: string, passwordHash: string): Promise<void>;
   setUsername(userId: string, username: string): Promise<void>;
   initializeAIUser(): Promise<void>;
   searchUsers(query: string): Promise<User[]>;
@@ -126,6 +127,13 @@ export class MemStorage implements IStorage {
     if (user) {
       user.emailVerified = true;
       user.emailVerificationToken = null;
+    }
+  }
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) {
+      user.passwordHash = passwordHash;
     }
   }
 
@@ -460,6 +468,13 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(users)
       .set({ emailVerified: true, emailVerificationToken: null })
+      .where(eq(users.id, userId));
+  }
+
+  async updateUserPassword(userId: string, passwordHash: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
       .where(eq(users.id, userId));
   }
 

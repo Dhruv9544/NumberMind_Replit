@@ -6,6 +6,80 @@ import { GameEngine } from "./gameEngine";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
 import { loginSchema, signupSchema } from "@shared/schema";
+import { Resend } from "resend";
+import crypto from "node:crypto";
+
+// Initialize Resend client (only active when API key is set)
+const resend = process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_YOUR_API_KEY_HERE'
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
+
+const FROM_EMAIL = process.env.FROM_EMAIL || 'no-reply@numbermindgame.com';
+
+/**
+ * Sends a branded password reset email via Resend.
+ * Falls back to console logging in development.
+ */
+async function sendPasswordResetEmail(toEmail: string, resetUrl: string): Promise<void> {
+  if (!resend) {
+    console.log(`[DEV] Password reset email would be sent to ${toEmail}`);
+    console.log(`[DEV] Reset URL: ${resetUrl}`);
+    return;
+  }
+
+  await resend.emails.send({
+    from: `NumberMind <${FROM_EMAIL}>`,
+    to: toEmail,
+    subject: 'Reset your NumberMind password',
+    html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reset your password</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0a0a;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#111111;border-radius:24px;border:1px solid #222;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="padding:40px 40px 32px;text-align:center;border-bottom:1px solid #1a1a1a;">
+              <p style="margin:0 0 16px;font-size:13px;font-weight:800;letter-spacing:0.3em;text-transform:uppercase;color:#10b981;">NUMBERMIND</p>
+              <h1 style="margin:0;font-size:26px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;font-style:italic;text-transform:uppercase;">Password Reset</h1>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px 16px;">
+              <p style="margin:0 0 24px;font-size:15px;color:#a3a3a3;line-height:1.6;">Someone requested a password reset for your NumberMind account. Click the button below to set a new password.</p>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding:8px 0 32px;">
+                    <a href="${resetUrl}" style="display:inline-block;background-color:#10b981;color:#ffffff;font-size:14px;font-weight:900;font-style:italic;text-transform:uppercase;letter-spacing:0.15em;text-decoration:none;padding:16px 40px;border-radius:14px;">Reset My Password</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 12px;font-size:13px;color:#525252;line-height:1.6;">This link expires in <strong style="color:#a3a3a3;">1 hour</strong>. If you didn't request this, you can safely ignore this email.</p>
+              <p style="margin:0;font-size:12px;color:#404040;word-break:break-all;">Or copy this link: <a href="${resetUrl}" style="color:#10b981;text-decoration:none;">${resetUrl}</a></p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px 36px;border-top:1px solid #1a1a1a;">
+              <p style="margin:0;font-size:11px;font-weight:800;letter-spacing:0.2em;text-transform:uppercase;color:#404040;text-align:center;">© ${new Date().getFullYear()} NumberMind &nbsp;·&nbsp; numbermindgame.com</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+  });
+}
 
 interface WSClient extends WebSocket {
   userId?: string;
@@ -111,6 +185,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.clearCookie('connect.sid');
       res.json({ success: true });
     });
+  });
+
+  // ── Forgot Password routes ────────────────────────────────────────
+  // In-memory store: token -> { userId, email, expiresAt }
+  const passwordResetTokens = new Map<string, { userId: string; email: string; expiresAt: Date }>();
+
+  // 1. Request a password reset (POST /api/auth/forgot-password)
+  app.post('/api/auth/forgot-password', async (req: any, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ message: 'Email is required' });
+      }
+
+      const user = await storage.getUserByEmail(email.trim().toLowerCase());
+
+      // Always respond with success to avoid email enumeration
+      if (!user) {
+        return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+      }
+
+      // Generate secure token
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      // Remove any previous tokens for this user
+      for (const [k, v] of Array.from(passwordResetTokens.entries())) {
+        if (v.userId === user.id) passwordResetTokens.delete(k);
+      }
+
+      passwordResetTokens.set(token, { userId: user.id, email: user.email!, expiresAt });
+
+      const resetUrl = `${req.protocol}://${req.get('host')}/auth/reset-password?token=${token}`;
+
+      // Send the actual email via Resend (no-op in dev if key not set)
+      try {
+        await sendPasswordResetEmail(user.email!, resetUrl);
+        console.log(`[Password Reset] Email sent to ${user.email}`);
+      } catch (emailErr) {
+        console.error('[Password Reset] Failed to send email:', emailErr);
+        // Don't fail the request if email fails — token still valid
+      }
+
+      res.json({
+        success: true,
+        message: 'If that email exists, a password reset link has been sent.',
+        // Only expose token/URL in non-production for developer testing
+        resetToken: process.env.NODE_ENV !== 'production' ? token : undefined,
+        resetUrl: process.env.NODE_ENV !== 'production' ? resetUrl : undefined,
+      });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({ message: 'Failed to process request. Please try again.' });
+    }
+  });
+
+  // 2. Validate a reset token (GET /api/auth/reset-password/validate?token=...)
+  app.get('/api/auth/reset-password/validate', (req: any, res) => {
+    const { token } = req.query;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ valid: false, message: 'Token is required' });
+    }
+    const record = passwordResetTokens.get(token);
+    if (!record) {
+      return res.status(400).json({ valid: false, message: 'Invalid or expired reset token.' });
+    }
+    if (record.expiresAt < new Date()) {
+      passwordResetTokens.delete(token);
+      return res.status(400).json({ valid: false, message: 'Reset token has expired. Please request a new one.' });
+    }
+    res.json({ valid: true, email: record.email });
+  });
+
+  // 3. Reset the password using a valid token (POST /api/auth/reset-password)
+  app.post('/api/auth/reset-password', async (req: any, res) => {
+    try {
+      const { token, password, confirmPassword } = req.body;
+
+      if (!token || !password || !confirmPassword) {
+        return res.status(400).json({ message: 'Token, password, and confirmPassword are required' });
+      }
+
+      if (password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords don't match" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters' });
+      }
+
+      const record = passwordResetTokens.get(token);
+      if (!record) {
+        return res.status(400).json({ message: 'Invalid or expired reset token. Please request a new one.' });
+      }
+      if (record.expiresAt < new Date()) {
+        passwordResetTokens.delete(token);
+        return res.status(400).json({ message: 'Reset token has expired. Please request a new one.' });
+      }
+
+      const newPasswordHash = await bcrypt.hash(password, 10);
+      await storage.updateUserPassword(record.userId, newPasswordHash);
+
+      // Invalidate the token immediately after use
+      passwordResetTokens.delete(token);
+
+      console.log(`[Password Reset] Password updated for userId=${record.userId}`);
+      res.json({ success: true, message: 'Password has been reset successfully. You can now log in.' });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ message: 'Failed to reset password. Please try again.' });
+    }
   });
 
   app.get('/api/auth/user', requireAuth, async (req: any, res) => {

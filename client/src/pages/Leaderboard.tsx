@@ -139,7 +139,7 @@ export default function Leaderboard() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-3 sm:gap-4">
             {leaderboard.map((user, idx) => (
               <motion.div
                 key={user.id}
@@ -155,68 +155,72 @@ export default function Leaderboard() {
                   onClick={() => setLocation(`/profile/${user.id}`)}
                   data-testid={`card-leaderboard-${idx}`}
                 >
-                  <CardContent className="p-4 sm:p-6">
-                    <div className="flex items-center justify-between gap-6">
-                       <div className="flex items-center gap-4 sm:gap-6 flex-1 min-w-0">
-                          <div className="w-10 sm:w-16 flex items-center justify-center shrink-0">
-                             {getRankIcon(idx + 1)}
-                          </div>
+                  <CardContent className="p-3 sm:p-6">
+                    <div className="flex items-center gap-2 sm:gap-6">
+                       {/* Rank Icon */}
+                       <div className="w-8 sm:w-16 flex items-center justify-center shrink-0">
+                          {getRankIcon(idx + 1)}
+                       </div>
                           
-                          <div className="relative shrink-0">
-                            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-800 border-2 border-neutral-700 flex items-center justify-center text-white font-black text-lg overflow-hidden group-hover:border-emerald-500 transition-colors">
-                              {getInitials(user)}
+                       {/* Avatar */}
+                       <div className="relative shrink-0">
+                         <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-neutral-800 border-2 border-neutral-700 flex items-center justify-center text-white font-black text-base sm:text-lg overflow-hidden group-hover:border-emerald-500 transition-colors">
+                           {getInitials(user)}
+                         </div>
+                         {idx < 3 && (
+                            <div className="absolute -top-1 -right-1">
+                               <Star className={cn(
+                                 "w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current",
+                                 idx === 0 ? "text-yellow-500" : idx === 1 ? "text-slate-400" : "text-amber-600"
+                               )} />
                             </div>
-                            {idx < 3 && (
-                               <div className="absolute -top-1 -right-1">
-                                  <Star className={cn(
-                                    "w-4 h-4 fill-current",
-                                    idx === 0 ? "text-yellow-500" : idx === 1 ? "text-slate-400" : "text-amber-600"
-                                  )} />
-                               </div>
-                            )}
-                          </div>
+                         )}
+                       </div>
                           
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-black text-white text-base sm:text-xl truncate flex items-center gap-2 italic uppercase tracking-tight">
-                              {user.username ? `@${user.username}` : user.name}
-                              {user.stats.currentStreak >= 3 && (
-                                <Badge className="bg-orange-500/10 text-orange-500 border-none px-1 h-4 font-black italic text-[9px]">
-                                   ON FIRE
-                                </Badge>
-                              )}
-                            </h3>
-                            <div className="flex items-center gap-3 mt-1 underline-offset-4">
-                              <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">
-                                {user.stats.gamesPlayed} Matches Engaged
-                              </span>
-                              {user.stats.currentStreak > 0 && (
-                                <div className="flex items-center gap-1">
-                                   <Flame className="w-3 h-3 text-orange-500 fill-orange-500" />
-                                   <span className="text-[10px] font-black text-orange-400">{user.stats.currentStreak} Streak</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                       {/* Player info */}
+                       <div className="flex-1 min-w-0">
+                         <h3 className="font-black text-white text-sm sm:text-xl truncate italic uppercase tracking-tight">
+                           {user.username ? `@${user.username}` : user.name}
+                           {user.stats.currentStreak >= 3 && (
+                             <Badge className="ml-1.5 bg-orange-500/10 text-orange-500 border-none px-1 h-4 font-black italic text-[8px] align-middle">
+                                🔥
+                             </Badge>
+                           )}
+                         </h3>
+                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                           <span className="text-[9px] sm:text-[10px] font-bold text-neutral-500 uppercase tracking-widest">
+                             {user.stats.gamesPlayed} Matches
+                           </span>
+                           {user.stats.currentStreak > 0 && (
+                             <div className="flex items-center gap-0.5">
+                                <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-orange-500 fill-orange-500" />
+                                <span className="text-[9px] sm:text-[10px] font-black text-orange-400">{user.stats.currentStreak}</span>
+                             </div>
+                           )}
+                         </div>
                        </div>
 
-                       <div className="flex items-center gap-6 sm:gap-12 shrink-0">
-                          <div className="text-right hidden sm:block">
-                             <div className="flex items-center justify-end gap-2 text-emerald-400 mb-1">
-                                <Target className="w-4 h-4" />
-                                <span className="text-2xl font-black tabular-nums">{user.stats.gamesWon}</span>
-                             </div>
-                             <p className="text-[10px] font-black uppercase text-neutral-600 tracking-widest">Victories</p>
-                          </div>
-                          
+                       {/* Stats */}
+                       <div className="flex items-center gap-2 sm:gap-8 shrink-0">
+                          {/* Victories */}
                           <div className="text-right">
-                             <div className="flex items-center justify-end gap-2 text-blue-400 mb-1">
-                                <TrendingUp className="w-4 h-4" />
-                                <span className="text-2xl font-black tabular-nums">{user.stats.winRate}%</span>
+                             <div className="flex items-center justify-end gap-0.5 sm:gap-1 text-emerald-400 mb-0.5">
+                                <Target className="w-3 h-3 sm:w-4 sm:h-4" />
+                                <span className="text-base sm:text-2xl font-black tabular-nums">{user.stats.gamesWon}</span>
                              </div>
-                             <p className="text-[10px] font-black uppercase text-neutral-600 tracking-widest">Win Rate</p>
+                             <p className="text-[8px] sm:text-[10px] font-black uppercase text-neutral-600 tracking-widest">Wins</p>
                           </div>
                           
-                          <ChevronRight className="w-5 h-5 text-neutral-800 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
+                          {/* Win Rate */}
+                          <div className="text-right">
+                             <div className="flex items-center justify-end gap-0.5 sm:gap-1 text-blue-400 mb-0.5">
+                                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+                                <span className="text-base sm:text-2xl font-black tabular-nums">{user.stats.winRate}%</span>
+                             </div>
+                             <p className="text-[8px] sm:text-[10px] font-black uppercase text-neutral-600 tracking-widest">Rate</p>
+                          </div>
+                          
+                          <ChevronRight className="w-4 h-4 text-neutral-800 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all hidden sm:block" />
                        </div>
                     </div>
                   </CardContent>
