@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation, useParams, Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,10 @@ import {
   Gamepad2,
   HelpCircle,
   Sparkles,
+  RefreshCw,
+  XCircle,
+  WifiOff,
+  Hourglass,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -80,6 +84,18 @@ export default function GamePlay() {
     enabled: true, // enabled globally; guard inside handleGuess handles turn/game-over
     onSubmit: () => handleGuess(),
   });
+
+  // ── Rematch state ────────────────────────────────────────────────────
+  // 'idle'          - no rematch activity
+  // 'sending'       - we just clicked Rematch, waiting for server
+  // 'waiting'       - we sent request, waiting for opponent response
+  // 'declined'      - opponent declined
+  // 'incoming'      - opponent sent us a rematch request
+  // 'accepted'      - both agreed, navigating to new game
+  type RematchStatus = 'idle' | 'sending' | 'waiting' | 'declined' | 'incoming' | 'accepted';
+  const [rematchStatus, setRematchStatus] = useState<RematchStatus>('idle');
+  const [rematchOpponentName, setRematchOpponentName] = useState<string>('');
+  const [isRespondingRematch, setIsRespondingRematch] = useState(false);
 
   const { data: game, refetch } = useQuery<GameState>({
     queryKey: ['/api/games', gameId],
@@ -146,6 +162,75 @@ export default function GamePlay() {
       setShowWinDialog(true);
     }
   }, [game?.status, showOpponentLeftDialog]);
+
+  // ── Rematch WS listener ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!lastMessage || !gameId) return;
+
+    // Opponent sent us a rematch request for the current finished game
+    if (lastMessage.type === 'rematch_request' && lastMessage.gameId === gameId) {
+      setRematchOpponentName(lastMessage.fromPlayerName || 'Your opponent');
+      setRematchStatus('incoming');
+    }
+
+    // Our rematch request was accepted — navigate to the new game's setup
+    if (lastMessage.type === 'rematch_accepted' && lastMessage.gameId === gameId) {
+      setRematchStatus('accepted');
+      toast({ title: '🎮 Rematch On!', description: 'Starting a new game...' });
+      setTimeout(() => {
+        setLocation(`/game/setup/${lastMessage.newGameId}`);
+      }, 1200);
+    }
+
+    // Our rematch request was declined
+    if (lastMessage.type === 'rematch_declined' && lastMessage.gameId === gameId) {
+      setRematchStatus('declined');
+    }
+  }, [lastMessage, gameId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Rematch handlers ─────────────────────────────────────────────────
+  const handleSendRematch = async () => {
+    if (!gameId) return;
+    setRematchStatus('sending');
+    try {
+      await apiRequest('POST', `/api/games/${gameId}/rematch`, {});
+      setRematchStatus('waiting');
+    } catch (err: any) {
+      toast({
+        title: 'Rematch Failed',
+        description: err.message || 'Could not send rematch request.',
+        variant: 'destructive',
+      });
+      setRematchStatus('idle');
+    }
+  };
+
+  const handleRespondRematch = async (accept: boolean) => {
+    if (!gameId) return;
+    setIsRespondingRematch(true);
+    try {
+      const result = await apiRequest('POST', `/api/games/${gameId}/rematch/respond`, { accept });
+      const data = await result.json();
+      if (accept && data.newGameId) {
+        setRematchStatus('accepted');
+        toast({ title: '🎮 Rematch On!', description: 'Starting a new game...' });
+        setTimeout(() => {
+          setLocation(`/game/setup/${data.newGameId}`);
+        }, 1200);
+      } else {
+        // Declined on our end — return to lobby
+        setLocation('/');
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to respond to rematch.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRespondingRematch(false);
+    }
+  };
 
   // Define handleGuess with useCallback BEFORE passing it to useNumberInput
   const handleGuess = useCallback(() => {
@@ -560,63 +645,149 @@ export default function GamePlay() {
         </main>
       </div>
 
-      {/* Win/Loss Dialog */}
+      {/* ─────────────────────────────────────────────────
+          POST-MATCH DIALOG  (Win / Loss / Forfeit)
+          ──────────────────────────────────────────────── */}
       <Dialog open={showWinDialog} onOpenChange={setShowWinDialog}>
         <DialogContent className="max-w-md border-neutral-800 bg-neutral-900 text-white">
           <DialogHeader>
             <div className="mx-auto w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
-               {playerWon ? <Trophy className="w-10 h-10 text-emerald-500" /> : <Loader2 className="w-10 h-10 text-red-500" />}
+               {playerWon ? <Trophy className="w-10 h-10 text-emerald-500" /> : <XCircle className="w-10 h-10 text-red-500" />}
             </div>
             <DialogTitle className="text-3xl font-black text-center">
-              {showOpponentLeftDialog ? "Victory by Forfeit!" : (playerWon ? "Victory!" : "Defeat")}
+              {playerWon ? "Victory!" : "Defeat"}
             </DialogTitle>
             <DialogDescription className="text-center text-neutral-400 pt-2 text-lg">
-              {showOpponentLeftDialog
-                ? "Your opponent has left the battlefield. You are the winner!"
-                : (playerWon 
-                    ? "You've successfully cracked the code and outsmarted your opponent."
-                    : "The opponent was faster this time. Your code was discovered.")
-              }
+              {playerWon 
+                ? "You've successfully cracked the code and outsmarted your opponent."
+                : "The opponent was faster this time. Your code was discovered."}
             </DialogDescription>
           </DialogHeader>
           
+          {/* Stats block */}
           <div className="bg-neutral-950 p-6 rounded-2xl border border-neutral-800 my-4 space-y-4">
             <div className="flex justify-between items-center pb-4 border-b border-neutral-800">
-               <span className="text-neutral-500 font-medium">Final Code</span>
+               <span className="text-neutral-500 font-medium">Opponent's Code</span>
                <span className="text-2xl font-black text-emerald-500 tracking-widest">{opponentSecret || "????"}</span>
             </div>
             <div className="flex justify-between items-center">
-               <span className="text-neutral-500 font-medium">Total Moves</span>
-               <span className="text-xl font-bold">{playerMoves.length} attempts</span>
+               <span className="text-neutral-500 font-medium">Your Attempts</span>
+               <span className="text-xl font-bold">{playerMoves.length} guesses</span>
             </div>
           </div>
 
-          <DialogFooter className="flex-col sm:flex-row gap-3">
-            <Button 
-              variant="outline" 
-              className="w-full border-neutral-700 bg-transparent hover:bg-neutral-800 py-6 text-lg"
-              onClick={() => setLocation('/')}
-            >
-              Main Menu
-            </Button>
-            <Button 
-              className="w-full bg-emerald-600 hover:bg-emerald-500 py-6 text-lg font-bold"
-              onClick={() => {
-                // For friend/multiplayer matches, go back to dashboard (lobby)
-                // For AI games, allow direct rematch via game setup
-                if (game?.gameMode === 'friend' || game?.gameMode === 'random') {
-                  setLocation('/');
-                } else {
-                  setLocation('/game/setup');
-                }
-              }}
-            >
-              {game?.gameMode === 'friend' || game?.gameMode === 'random' ? 'Return to Lobby' : 'Play Again'}
-            </Button>
-          </DialogFooter>
+          {/* ── Rematch section — only for friend/multiplayer games ── */}
+          {(game?.gameMode === 'friend' || game?.gameMode === 'random') && (
+            <div className="space-y-3">
+
+              {/* IDLE: show primary Rematch button */}
+              {rematchStatus === 'idle' && (
+                <Button
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black h-13 py-4 rounded-xl shadow-lg shadow-emerald-900/30 transition-all active:scale-95 text-base gap-2"
+                  onClick={handleSendRematch}
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  Rematch
+                </Button>
+              )}
+
+              {/* SENDING: spinner */}
+              {rematchStatus === 'sending' && (
+                <Button disabled className="w-full bg-emerald-600/60 text-white font-black h-13 py-4 rounded-xl text-base gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Sending Rematch...
+                </Button>
+              )}
+
+              {/* WAITING: waiting for opponent */}
+              {rematchStatus === 'waiting' && (
+                <div className="flex flex-col items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                  <div className="flex items-center gap-2 text-emerald-400">
+                    <Hourglass className="w-5 h-5 animate-pulse" />
+                    <span className="font-bold text-sm">Waiting for opponent to accept...</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-neutral-500 hover:text-red-400 text-xs"
+                    onClick={() => setRematchStatus('idle')}
+                  >
+                    Cancel request
+                  </Button>
+                </div>
+              )}
+
+              {/* INCOMING: opponent is requesting a rematch */}
+              {rematchStatus === 'incoming' && (
+                <div className="flex flex-col gap-3 p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                  <p className="text-blue-300 font-bold text-sm text-center">
+                    ⚔️ <span>{rematchOpponentName}</span> wants a rematch!
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      disabled={isRespondingRematch}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold h-11 rounded-xl gap-1.5"
+                      onClick={() => handleRespondRematch(true)}
+                    >
+                      {isRespondingRematch ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      Accept
+                    </Button>
+                    <Button
+                      disabled={isRespondingRematch}
+                      variant="outline"
+                      className="flex-1 border-neutral-700 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-400 font-bold h-11 rounded-xl gap-1.5"
+                      onClick={() => handleRespondRematch(false)}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* DECLINED: opponent said no */}
+              {rematchStatus === 'declined' && (
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                  <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                  <p className="text-red-300 text-sm font-bold">Opponent declined the rematch.</p>
+                </div>
+              )}
+
+              {/* ACCEPTED: navigating */}
+              {rematchStatus === 'accepted' && (
+                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                  <Loader2 className="w-5 h-5 text-emerald-400 animate-spin shrink-0" />
+                  <p className="text-emerald-300 text-sm font-bold">Rematch accepted! Loading new game...</p>
+                </div>
+              )}
+
+              {/* Go to Lobby — always visible */}
+              <Button
+                variant="outline"
+                className="w-full border-neutral-700 bg-transparent hover:bg-neutral-800 py-4 h-13 text-base rounded-xl"
+                onClick={() => setLocation('/')}
+              >
+                Go to Lobby
+              </Button>
+            </div>
+          )}
+
+          {/* For AI / solo games keep a simple Play Again button */}
+          {game?.gameMode !== 'friend' && game?.gameMode !== 'random' && (
+            <DialogFooter className="flex-col sm:flex-row gap-3">
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-500 py-6 text-lg font-bold"
+                onClick={() => setLocation('/game/setup')}
+              >
+                Play Again
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
-      {/* Opponent Left Dialog (Forfeit) */}
+      {/* ────────────────────────────────────────────────
+          OPPONENT LEFT DIALOG (Forfeit)
+          ──────────────────────────────────────────────── */}
       <Dialog open={showOpponentLeftDialog} onOpenChange={setShowOpponentLeftDialog}>
         <DialogContent className="max-w-md border-neutral-800 bg-neutral-900 text-white shadow-2xl shadow-emerald-500/10">
           <DialogHeader className="pt-4">
@@ -632,17 +803,17 @@ export default function GamePlay() {
             </div>
             <DialogTitle className="text-3xl font-black text-center tracking-tight">Victory by Forfeit!</DialogTitle>
             <DialogDescription className="text-center text-neutral-400 pt-3 text-lg leading-relaxed">
-              Your opponent has retreated from the battlefield. You have been declared the winner of this match.
+              Your opponent retreated from the battlefield. You are the winner!
             </DialogDescription>
           </DialogHeader>
           
-          <div className="mt-8 flex flex-col gap-3">
-             <Button 
-               onClick={() => setLocation('/')}
-               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black h-14 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all active:scale-95 text-lg"
-             >
-               Return to Lobby
-             </Button>
+          <div className="mt-6 flex flex-col gap-3">
+            <Button 
+              onClick={() => setLocation('/')}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black h-14 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all active:scale-95 text-lg"
+            >
+              Go to Lobby
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

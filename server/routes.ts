@@ -1172,6 +1172,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Rematch System ────────────────────────────────────────────────────
+  // rematchRequests: gameId -> { fromPlayerId, toPlayerId, newGameId, status }
+  const rematchRequests = new Map<string, {
+    fromPlayerId: string;
+    toPlayerId: string;
+    newGameId?: string;
+    status: 'pending' | 'accepted' | 'declined';
+  }>();
+
+  // POST /api/games/:gameId/rematch  — initiator calls this
+  app.post("/api/games/:gameId/rematch", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { gameId } = req.params;
+
+      const oldGame = await gameStore.getGame(gameId);
+      if (!oldGame) return res.status(404).json({ message: "Game not found" });
+
+      // Only players from the finished game can request rematch
+      if (oldGame.player1Id !== userId && oldGame.player2Id !== userId) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      if (oldGame.status !== 'finished') {
+        return res.status(400).json({ message: "Game is not finished yet" });
+      }
+
+      const opponentId = oldGame.player1Id === userId ? oldGame.player2Id : oldGame.player1Id;
+      if (!opponentId || opponentId === 'AI') {
+        return res.status(400).json({ message: "Rematch is only available in multiplayer games" });
+      }
+
+      // Check if opponent is still online
+      const opponentOnline = Array.from(wss.clients).some((c: any) =>
+        c.userId === opponentId && c.readyState === WebSocket.OPEN
+      );
+      if (!opponentOnline) {
+        return res.status(400).json({ message: "Opponent is no longer online" });
+      }
+
+      // Prevent duplicate pending requests for the same game
+      if (rematchRequests.has(gameId)) {
+        const existing = rematchRequests.get(gameId)!;
+        if (existing.status === 'pending') {
+          return res.status(400).json({ message: "Rematch request already sent" });
+        }
+      }
+
+      // Record pending request
+      rematchRequests.set(gameId, { fromPlayerId: userId, toPlayerId: opponentId, status: 'pending' });
+
+      // Get sender display name
+      const sender = await storage.getUser(userId);
+      const senderName = sender?.username || sender?.firstName || 'Your opponent';
+
+      // Notify opponent via WebSocket
+      (wss.clients as Set<any>).forEach((client: any) => {
+        if (client.userId === opponentId && client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: 'rematch_request',
+            gameId,
+            fromPlayerId: userId,
+            fromPlayerName: senderName,
+          }));
+        }
+      });
+
+      res.json({ success: true, message: "Rematch request sent" });
+    } catch (error) {
+      console.error("Error sending rematch request:", error);
+      res.status(500).json({ message: "Failed to send rematch request" });
+    }
+  });
+
+  // POST /api/games/:gameId/rematch/respond  — opponent accepts or declines
+  app.post("/api/games/:gameId/rematch/respond", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { gameId } = req.params;
+      const { accept } = req.body; // boolean
+
+      const request = rematchRequests.get(gameId);
+      if (!request || request.status !== 'pending') {
+        return res.status(404).json({ message: "No pending rematch request for this game" });
+      }
+
+      if (request.toPlayerId !== userId) {
+        return res.status(403).json({ message: "Not authorized to respond to this rematch" });
+      }
+
+      if (!accept) {
+        // Declined
+        request.status = 'declined';
+        rematchRequests.set(gameId, request);
+
+        // Notify the requester
+        (wss.clients as Set<any>).forEach((client: any) => {
+          if (client.userId === request.fromPlayerId && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'rematch_declined',
+              gameId,
+            }));
+          }
+        });
+
+        return res.json({ success: true, accepted: false });
+      }
+
+      // Accepted — create a fresh game between the same players
+      const oldGame = await gameStore.getGame(gameId);
+      if (!oldGame) return res.status(404).json({ message: "Original game not found" });
+
+      // Determine player roles: keep original player1 / player2 assignment
+      const newGame = await gameStore.createGame({
+        player1Id: oldGame.player1Id,
+        player2Id: oldGame.player2Id,
+        gameMode: oldGame.gameMode,
+        difficulty: oldGame.difficulty,
+        status: 'waiting', // both need to set secrets → GameSetupNew handles this
+      });
+
+      request.status = 'accepted';
+      request.newGameId = newGame.id;
+      rematchRequests.set(gameId, request);
+
+      // Notify both players about the new game
+      const notifyMsg = JSON.stringify({
+        type: 'rematch_accepted',
+        gameId,          // old game id (for correlation)
+        newGameId: newGame.id,
+      });
+
+      (wss.clients as Set<any>).forEach((client: any) => {
+        if (
+          (client.userId === request.fromPlayerId || client.userId === request.toPlayerId) &&
+          client.readyState === WebSocket.OPEN
+        ) {
+          client.send(notifyMsg);
+        }
+      });
+
+      res.json({ success: true, accepted: true, newGameId: newGame.id });
+    } catch (error) {
+      console.error("Error responding to rematch:", error);
+      res.status(500).json({ message: "Failed to respond to rematch" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // WebSocket server for real-time gameplay

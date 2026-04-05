@@ -97,6 +97,27 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           // Game-specific message, will be handled by game component
           break;
 
+        case 'rematch_request':
+          toast({
+            title: '🔁 Rematch Requested!',
+            description: `${message.fromPlayerName || 'Your opponent'} wants a rematch! Check the game to respond.`,
+            duration: 20000,
+          });
+          break;
+
+        case 'rematch_declined':
+          toast({
+            title: '❌ Rematch Declined',
+            description: 'Your opponent declined the rematch.',
+            variant: 'destructive',
+            duration: 6000,
+          });
+          break;
+
+        case 'rematch_accepted':
+          // Navigation handled by GamePlayNew via lastMessage
+          break;
+
         default:
           console.log('Unhandled message type:', message.type);
       }

@@ -1,8 +1,8 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useLocation, Link } from 'wouter';
+import { useLocation, Link, useParams } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNumberInput } from '@/components/GameComponents';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -13,34 +13,32 @@ import {
   Loader2, 
   Users, 
   Search, 
-  Clock, 
   Bot as BotIcon, 
   Globe, 
   HelpCircle,
-  Gamepad2,
   ChevronRight,
-  Sparkles,
-  Trophy,
   ShieldAlert,
-  Target,
   User as UserIcon,
-  RotateCcw
+  RotateCcw,
+  Gamepad2,
+  BookOpen,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
   DialogDescription, 
-  DialogFooter,
   DialogTrigger
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { GameLoader } from '@/components/GameLoader';
+import { HowToPlayTour, resetTour } from '@/components/HowToPlayTour';
+import { ExampleBox } from '@/components/ExampleBox';
+import { PracticeMode } from '@/components/PracticeMode';
 
 export default function GameSetup() {
   const { user } = useAuth();
@@ -51,6 +49,10 @@ export default function GameSetup() {
   const [showFriendPicker, setShowFriendPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [gameId, setGameId] = useState<string | null>(null);
+
+  // ── Onboarding state ──────────────────────────────────────────────────
+  const [showTour, setShowTour] = useState(false);
+  const [showPractice, setShowPractice] = useState(false);
 
   // Stable ref so the keyboard handler always calls the latest handleStart
   const handleStartRef = useRef<() => void>(() => {});
@@ -69,22 +71,29 @@ export default function GameSetup() {
     },
   });
 
+  const routeParams = useParams<{ gameId?: string }>();
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
-    const id = params.get('gameId');
+    const id = routeParams?.gameId || params.get('gameId');  // prefer route param
     const opponent = params.get('opponent'); // username of challenged friend
     if (mode) setGameMode(mode || 'ai');
-    if (id) setGameId(id);
+    if (id) {
+      setGameId(id);
+      // When arriving via rematch (/game/setup/:gameId), default to friend mode
+      // so the secret-setting path executes correctly
+      if (!mode) setGameMode('friend');
+    }
     // If arriving from Friends page challenge (gameId already created),
     // pre-select the opponent so the button is enabled
     if (id && opponent) {
       setSelectedFriend({ id: '_pre_challenged', name: opponent });
-    } else if (id && mode === 'friend') {
+    } else if (id) {
       // gameId exists but no opponent — still unlock the button
       setSelectedFriend({ id: '_pre_challenged', name: 'Your friend' });
     }
-  }, []);
+  }, [routeParams?.gameId]);
 
   const createGameMutation = useMutation({
     mutationFn: async () => {
@@ -206,6 +215,13 @@ export default function GameSetup() {
       </div>
 
       <div className="relative z-10 w-full max-w-lg mx-auto px-4 py-8 sm:py-12 flex flex-col flex-1">
+        {/* How To Play Tour — auto-shows for first-time users */}
+        <HowToPlayTour
+          forceShow={showTour}
+          enableJoyride
+          onClose={() => setShowTour(false)}
+        />
+
         {/* Header Section */}
         <div className="flex items-center justify-between mb-8 sm:mb-12">
           <div className="flex items-center gap-4">
@@ -220,60 +236,76 @@ export default function GameSetup() {
             </div>
           </div>
 
+          <div className="flex items-center gap-2">
+            {/* Show Tutorial replay button */}
+            <button
+              onClick={() => { resetTour(); setShowTour(true); }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-colors group text-xs font-bold text-neutral-500 hover:text-emerald-400"
+              title="Show Tutorial"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Tutorial</span>
+            </button>
+
           <Dialog>
              <DialogTrigger asChild>
                <Button variant="ghost" size="icon" className="rounded-full bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-emerald-400">
                   <HelpCircle className="w-5 h-5" />
                </Button>
              </DialogTrigger>
-             <DialogContent className="max-w-md border-neutral-800 bg-neutral-900 text-white">
+             <DialogContent className="max-w-md border-neutral-800 bg-neutral-900 text-white overflow-y-auto max-h-[90vh]">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-black">How to Play</DialogTitle>
                   <DialogDescription className="text-neutral-400">
-                    Master the art of NumberMind deduction.
+                    The goal: guess your opponent's secret 4-digit number before they guess yours.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-6 pt-4">
-                  <div className="flex items-start gap-4 p-4 rounded-xl bg-black/20 border border-neutral-800">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-                       <Target className="w-5 h-5 text-emerald-500" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-sm mb-1">How Scoring Works</h4>
-                      <p className="text-xs text-neutral-400 leading-relaxed">
-                        <strong className="text-emerald-400">Dig</strong> = how many digits in your guess also appear in the secret (any position).<br />
-                        <strong className="text-emerald-400">Pos</strong> = how many of those are also in the right spot.<br />
-                        Pos is always &le; Dig. When Pos = 4, you win.
-                      </p>
-                    </div>
+
+                <div className="space-y-5 pt-2">
+                  {/* Quick rules */}
+                  <div className="space-y-2">
+                    {[
+                      { emoji: '🔒', text: 'Each player picks a secret 4-digit number with all unique digits.' },
+                      { emoji: '🎯', text: 'Take turns guessing your opponent\'s number.' },
+                      { emoji: '💡', text: 'After each guess you get Pos (right position) and Dig (right digit, any position).' },
+                      { emoji: '🏆', text: 'First to get Pos = 4 wins!' },
+                    ].map((r, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-neutral-800/60 border border-neutral-800">
+                        <span className="text-lg shrink-0">{r.emoji}</span>
+                        <p className="text-xs text-neutral-300 leading-relaxed">{r.text}</p>
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                        <span className="text-xl font-bold text-emerald-500">✓ Pos</span>
-                        <p className="text-[10px] text-emerald-400 mt-1 uppercase font-bold">Exact Position</p>
-                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Right digit in the right spot. 4 Pos = WIN.</p>
-                     </div>
-                     <div className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
-                        <span className="text-xl font-bold text-yellow-500">◆ Dig</span>
-                        <p className="text-[10px] text-yellow-500 mt-1 uppercase font-bold">Common Digits</p>
-                        <p className="text-[10px] text-neutral-400 mt-1 leading-tight">Total digits shared with the secret - <em>includes</em> Pos hits. Dig &ge; Pos always.</p>
-                     </div>
+                  {/* Live example */}
+                  <div>
+                    <p className="text-[10px] uppercase font-black tracking-widest text-neutral-500 mb-2">📖 Example</p>
+                    <ExampleBox
+                      secret="1234"
+                      guess="1243"
+                      pos={2}
+                      dig={4}
+                      highlightGuess={[0, 1, 2, 3]}
+                      caption="Secret is 1234. You guess 1243. All 4 digits exist (Dig=4), but only 1 and 2 are in the right spot (Pos=2)."
+                    />
                   </div>
 
-                  <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-800">
-                     <div className="flex items-center gap-2 mb-3">
-                        <Sparkles className="w-3 h-3 text-emerald-500" />
-                        <span className="text-[10px] uppercase font-black text-neutral-500 tracking-tighter">Pro Tip</span>
-                     </div>
-                     <p className="text-xs text-neutral-300 italic uppercase tracking-tighter font-medium">No Repeating Digits. No Zeros start the code. Use logic, not luck.</p>
-                  </div>
+                  {/* Full tour link */}
+                  <button
+                    onClick={() => {
+                      resetTour();
+                      setShowTour(true);
+                      (document.activeElement as HTMLElement)?.blur();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 transition-colors text-sm font-bold"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Open Full Tutorial
+                  </button>
                 </div>
-                <DialogFooter className="mt-6">
-                   <Button className="w-full bg-emerald-600 hover:bg-emerald-500 font-bold h-12 rounded-xl">Got It, Let's Go</Button>
-                </DialogFooter>
              </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Setup Content */}
@@ -388,7 +420,10 @@ export default function GameSetup() {
           )}
 
           {/* Number Selection Card */}
-          <Card className="border-neutral-800 bg-neutral-900/50 backdrop-blur-sm overflow-hidden rounded-3xl shadow-2xl">
+          <Card
+            data-tour="secret-input"
+            className="border-neutral-800 bg-neutral-900/50 backdrop-blur-sm overflow-hidden rounded-3xl shadow-2xl"
+          >
             <div className="h-1 w-full bg-emerald-500/50" />
             <CardHeader className="text-center pb-2">
               <CardTitle className="text-sm font-bold uppercase tracking-[0.2em] text-neutral-500 italic flex items-center justify-center gap-2">
@@ -396,7 +431,7 @@ export default function GameSetup() {
                  Secure Your Secret
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4 px-6 pb-8 space-y-8">
+            <CardContent className="pt-4 px-6 pb-8 space-y-6">
               {/* Display Slots */}
               <div className="flex justify-center gap-3">
                  {digits.map((d, i) => (
@@ -418,8 +453,8 @@ export default function GameSetup() {
                  ))}
               </div>
 
-              {/* Pad */}
-              <div className="grid grid-cols-5 gap-2 max-w-[280px] mx-auto">
+              {/* Numpad */}
+              <div data-tour="numpad" className="grid grid-cols-5 gap-2 max-w-[280px] mx-auto">
                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => (
                    <Button
                      key={n}
@@ -442,11 +477,11 @@ export default function GameSetup() {
                     Reset
                  </Button>
                  <Button
+                    data-tour="start-btn"
                     onClick={handleStart}
                     disabled={
                       !isComplete() ||
                       isLoading ||
-                      // Only require selectedFriend when no pre-existing gameId
                       (gameMode === 'friend' && !gameId && !selectedFriend)
                     }
                     className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white font-black italic uppercase tracking-wider h-12 rounded-xl shadow-lg shadow-emerald-500/10"
@@ -460,6 +495,50 @@ export default function GameSetup() {
               </div>
             </CardContent>
           </Card>
+
+          {/* ── Example Box ── */}
+          <div data-tour="example-box">
+            <p className="text-[10px] uppercase font-black tracking-widest text-neutral-600 mb-2 flex items-center gap-1.5">
+              <BookOpen className="w-3 h-3" />
+              How feedback works
+            </p>
+            <ExampleBox
+              secret="1234"
+              guess="1243"
+              pos={2}
+              dig={4}
+              highlightGuess={[0, 1, 2, 3]}
+              caption="Secret: 1234 · Guess: 1243 → 4 digits exist (Dig=4), only positions 1 & 2 match (Pos=2)"
+            />
+          </div>
+
+          {/* ── Practice Mode toggle ── */}
+          <div>
+            <AnimatePresence>
+              {showPractice ? (
+                <motion.div
+                  key="practice"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <PracticeMode onDone={() => setShowPractice(false)} />
+                </motion.div>
+              ) : (
+                <motion.button
+                  key="practice-btn"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  onClick={() => setShowPractice(true)}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-neutral-800 bg-neutral-900/30 text-neutral-500 hover:text-emerald-400 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-xs font-bold group"
+                >
+                  <Gamepad2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  🎮 Try a quick practice round first
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* Footer info/stats */}
