@@ -36,7 +36,7 @@ export function ExampleBox({
   return (
     <div
       className={cn(
-        "rounded-2xl border p-4 space-y-3 text-sm",
+        "rounded-2xl border p-3 sm:p-4 space-y-2.5 sm:space-y-3 text-sm",
         win
           ? "bg-emerald-500/10 border-emerald-500/30"
           : "bg-neutral-900/70 border-neutral-800",
@@ -45,14 +45,14 @@ export function ExampleBox({
     >
       {/* Secret row */}
       <div className="flex items-center gap-3">
-        <span className="text-[10px] font-black uppercase tracking-widest text-neutral-600 w-14 shrink-0">
+        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-neutral-600 w-10 sm:w-14 shrink-0">
           Secret
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1 sm:gap-1.5">
           {secret.split("").map((d, i) => (
             <div
               key={i}
-              className="w-8 h-9 rounded-lg bg-neutral-800 border border-neutral-700 flex items-center justify-center font-black text-sm text-neutral-500"
+              className="w-7 h-8 sm:w-8 sm:h-9 rounded-lg bg-neutral-800 border border-neutral-700 flex items-center justify-center font-black text-xs sm:text-sm text-neutral-500"
             >
               {d}
             </div>
@@ -65,15 +65,15 @@ export function ExampleBox({
 
       {/* Guess row */}
       <div className="flex items-center gap-3">
-        <span className="text-[10px] font-black uppercase tracking-widest text-neutral-600 w-14 shrink-0">
+        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-neutral-600 w-10 sm:w-14 shrink-0">
           Guess
         </span>
-        <div className="flex gap-1.5 flex-1">
+        <div className="flex gap-1 sm:gap-1.5 flex-1">
           {guess.split("").map((d, i) => (
             <div
               key={i}
               className={cn(
-                "w-8 h-9 rounded-lg flex items-center justify-center font-black text-sm border transition-all",
+                "w-7 h-8 sm:w-8 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm border transition-all",
                 highlightGuess.includes(i)
                   ? pos > 0 && highlightGuess.every((hi) => hi < pos)
                     ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
@@ -87,7 +87,7 @@ export function ExampleBox({
         </div>
 
         {/* Pos + Dig badges */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <div className="flex flex-col items-center gap-0.5">
             <div className="flex items-center gap-0.5 bg-emerald-500/10 border border-emerald-500/25 rounded-lg px-2 py-1.5">
               <Target className="w-3 h-3 text-emerald-400 shrink-0" />
@@ -115,7 +115,7 @@ export function ExampleBox({
 
       {/* Caption */}
       {caption && (
-        <p className="text-[11px] text-white-500 leading-relaxed pt-1 border-t border-neutral-800">
+        <p className="text-[10px] sm:text-[11px] text-white-500 leading-relaxed pt-1 border-t border-neutral-800">
           {caption}
         </p>
       )}

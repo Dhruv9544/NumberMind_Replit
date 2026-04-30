@@ -416,9 +416,9 @@ export function HowToPlayTour({
               transition={{ type: "spring", stiffness: 300, damping: 28 }}
               className="fixed inset-0 z-[101] flex items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-none"
             >
-              <div className="pointer-events-auto w-full sm:max-w-md bg-neutral-900 border border-neutral-800 rounded-t-[2rem] sm:rounded-[2rem] overflow-hidden shadow-2xl shadow-black/60 flex flex-col">
+              <div className="pointer-events-auto w-full sm:max-w-md bg-neutral-900 border border-neutral-800 rounded-t-[2rem] sm:rounded-[2rem] shadow-2xl shadow-black/60 flex flex-col max-h-[92svh] sm:max-h-none overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-neutral-800">
+                <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-neutral-800 shrink-0">
                   <div className="flex items-center gap-2">
                     <HelpCircle className="w-4 h-4 text-emerald-500" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-emerald-500">
@@ -435,7 +435,7 @@ export function HowToPlayTour({
                 </div>
 
                 {/* Progress dots */}
-                <div className="flex justify-center gap-1.5 pt-4 px-6">
+                <div className="flex justify-center gap-1.5 pt-3 sm:pt-4 px-6 shrink-0">
                   {SLIDES.map((_, i) => (
                     <button
                       key={i}
@@ -452,7 +452,7 @@ export function HowToPlayTour({
                 </div>
 
                 {/* Slide content */}
-                <div className="px-6 pb-4 pt-4 min-h-[340px] flex flex-col overflow-y-auto max-h-[60vh]">
+                <div className="px-4 sm:px-6 pb-4 pt-3 sm:pt-4 flex-1 flex flex-col overflow-y-auto overscroll-contain sm:min-h-[340px] sm:max-h-[60vh]">
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={slide.id}
@@ -463,13 +463,13 @@ export function HowToPlayTour({
                       className="flex flex-col items-center gap-4 flex-1"
                     >
                       {/* Icon */}
-                      <div className="w-16 h-16 rounded-2xl bg-neutral-800 border border-neutral-700 flex items-center justify-center shrink-0">
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-neutral-800 border border-neutral-700 flex items-center justify-center shrink-0">
                         {slide.icon}
                       </div>
 
                       {/* Title */}
                       <div className="text-center shrink-0">
-                        <h2 className="text-xl font-black tracking-tight">
+                        <h2 className="text-base sm:text-xl font-black tracking-tight leading-tight">
                           {slide.title}
                         </h2>
                         <p className="text-xs font-bold text-neutral-500 uppercase tracking-widest mt-1">
@@ -484,13 +484,13 @@ export function HowToPlayTour({
                 </div>
 
                 {/* Footer nav */}
-                <div className="px-6 pb-6 pt-2 flex flex-col gap-2 border-t border-neutral-800/50">
+                <div className="px-4 sm:px-6 pb-5 sm:pb-6 pt-2 flex flex-col gap-2 border-t border-neutral-800/50 shrink-0">
                   <div className="flex gap-3">
                     {step > 0 ? (
                       <Button
                         variant="outline"
                         onClick={prev}
-                        className="flex-1 border-neutral-700 bg-transparent hover:bg-neutral-800 h-12"
+                        className="flex-1 border-neutral-700 bg-transparent hover:bg-neutral-800 h-10 sm:h-12"
                       >
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back
@@ -499,7 +499,7 @@ export function HowToPlayTour({
                       <Button
                         variant="outline"
                         onClick={() => close()}
-                        className="flex-1 border-neutral-700 bg-transparent hover:bg-neutral-800 h-12 text-neutral-500"
+                        className="flex-1 border-neutral-700 bg-transparent hover:bg-neutral-800 h-10 sm:h-12 text-neutral-500"
                       >
                         Skip
                       </Button>
@@ -508,7 +508,7 @@ export function HowToPlayTour({
                     <Button
                       onClick={next}
                       className={cn(
-                        "flex-[2] h-12 font-black uppercase tracking-wider",
+                        "flex-[2] h-10 sm:h-12 font-black uppercase tracking-wider",
                         isLast
                           ? "bg-emerald-600 hover:bg-emerald-500 text-white"
                           : "bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white"

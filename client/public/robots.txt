@@ -1,0 +1,11 @@
+# robots.txt for NumberMind (https://numbermindgame.com)
+# Generated: 2026-04-07
+
+User-agent: *
+Allow: /
+
+# Block API routes from crawling (not useful for search engines)
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://numbermindgame.com/sitemap.xml

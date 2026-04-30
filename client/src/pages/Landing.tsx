@@ -1,4 +1,4 @@
-﻿import { Link } from "wouter";
+import { Link } from "wouter";
 import { motion, useInView } from "framer-motion";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -79,14 +79,20 @@ function Section({
   children,
   className,
   id,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-label": ariaLabel,
 }: {
   children: React.ReactNode;
   className?: string;
   id?: string;
+  "aria-labelledby"?: string;
+  "aria-label"?: string;
 }) {
   return (
     <section
       id={id}
+      aria-labelledby={ariaLabelledBy}
+      aria-label={ariaLabel}
       className={cn("relative w-full px-4 sm:px-6 lg:px-8", className)}
     >
       <div className="max-w-6xl mx-auto">{children}</div>
@@ -99,7 +105,11 @@ function Section({
 // ─────────────────────────────────────────────
 function LandingNav() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-neutral-800/60 bg-neutral-950/80 backdrop-blur-xl">
+    <header
+      role="banner"
+      aria-label="NumberMind site navigation"
+      className="sticky top-0 z-50 w-full border-b border-neutral-800/60 bg-neutral-950/80 backdrop-blur-xl"
+    >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
@@ -113,14 +123,14 @@ function LandingNav() {
               </div>
             </div>
             <div>
-              <span className="text-lg font-black italic tracking-tighter uppercase text-white">
+              <span className="text-lg font-black italic tracking-tighter uppercase text-white" aria-label="NumberMind – Multiplayer Code-Breaking Game">
                 Number<span className="text-emerald-400">Mind</span>
               </span>
             </div>
           </div>
 
           {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-400">
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-400" aria-label="Main navigation">
             <a
               href="#how-it-works"
               className="hover:text-white transition-colors"
@@ -198,9 +208,12 @@ function HeroSection() {
           </div>
         </FadeIn>
 
-        {/* Headline */}
+        {/* Headline - H1 with primary keyword for SEO */}
         <FadeIn delay={0.1}>
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.9] uppercase italic max-w-4xl">
+          <h1
+            className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.9] uppercase italic max-w-4xl"
+            aria-label="NumberMind – Multiplayer Code-Breaking Deduction Game: Crack the Code, Beat the Mind"
+          >
             <span className="text-white">Crack the</span>
             <br />
             <span className="text-emerald-400 drop-shadow-[0_0_40px_rgba(52,211,153,0.4)]">
@@ -214,15 +227,15 @@ function HeroSection() {
           </h1>
         </FadeIn>
 
-        {/* Subheading */}
+        {/* Subheading - keyword-rich description */}
         <FadeIn delay={0.2}>
           <p className="text-neutral-400 text-lg sm:text-xl max-w-xl leading-relaxed font-medium">
             NumberMind is the ultimate{" "}
             <span className="text-white font-semibold">
-              real-time strategic deduction game
+              real-time multiplayer code-breaking deduction game
             </span>
-            . Choose your secret, decode your opponent's, and outsmart them
-            before they crack yours.
+            . Pick a secret 4-digit number, decode your opponent's logic puzzle,
+            and outsmart them before they crack yours.
           </p>
         </FadeIn>
 
@@ -1094,18 +1107,155 @@ function Footer() {
 }
 
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// 8. SEO CONTENT SECTION (keyword-rich, FAQ)
+// ─────────────────────────────────────────────
+function SEOContentSection() {
+  const faqs = [
+    {
+      q: "What is NumberMind?",
+      a: "NumberMind is a free real-time multiplayer code-breaking deduction game. Two players each pick a secret 4-digit number with unique digits, then take turns guessing each other's code. Clues reveal how many digits are correct and how many are in the right position. The first player to crack their opponent's code wins.",
+    },
+    {
+      q: "How do you play the NumberMind code-breaking game?",
+      a: "Each player secretly selects a 4-digit number where all digits are unique (e.g. 1, 3, 7, 9). Players alternate making guesses. After each guess, you receive two clues: the number of correct digits (right digit, wrong position) and the number of exact matches (right digit, right position). Use logical deduction to narrow possibilities and crack the code before your opponent does.",
+    },
+    {
+      q: "Is NumberMind free to play?",
+      a: "Yes! NumberMind is completely free to play with no credit card required. Simply sign up, create a username, and start playing immediately in your browser – no download needed.",
+    },
+    {
+      q: "What makes NumberMind different from Mastermind?",
+      a: "Unlike classic Mastermind which uses colored pegs against a computer, NumberMind is a live multiplayer deduction puzzle where you compete against real humans in real time. Both players guess simultaneously, creating tension and strategic depth that single-player code-breaking games can't match.",
+    },
+    {
+      q: "What game modes does NumberMind offer?",
+      a: "NumberMind offers three exciting modes: (1) Challenge Friends – send a private invite to a friend for a head-to-head PvP match; (2) Random Matchmaking – join the global queue and get paired with a random opponent instantly; (3) Practice vs AI – sharpen your deduction skills against an AI opponent with adjustable difficulty before competing online.",
+    },
+    {
+      q: "How does the scoring and leaderboard system work?",
+      a: "Every match is tracked and contributes to your global ranking. Win more games to climb the leaderboard, build win streaks for bonus recognition, and track your lifetime win rate and match history. The global leaderboard updates in real time.",
+    },
+  ];
+
+  return (
+    <Section
+      id="faq"
+      className="py-20"
+      aria-labelledby="faq-heading"
+    >
+      {/* Hidden SEO keyword paragraph for crawlers – visually minimal */}
+      <div className="sr-only">
+        NumberMind is an online code-breaking game, logic deduction puzzle, and multiplayer brain game.
+        Play this free mastermind-style deduction game against real opponents in real time.
+        Features include multiplayer PvP, AI practice mode, global leaderboards, and game history.
+        Keywords: number mind game, code breaking game online, deduction puzzle, logic game multiplayer, secret number game, brain teaser.
+      </div>
+
+      <FadeIn>
+        <div className="text-center mb-12">
+          <Badge
+            variant="outline"
+            className="border-neutral-700 text-neutral-400 mb-4 uppercase tracking-widest text-[10px] font-black"
+          >
+            Got Questions?
+          </Badge>
+          <h2
+            id="faq-heading"
+            className="text-4xl sm:text-5xl font-black tracking-tight uppercase italic text-white mb-4"
+          >
+            Frequently Asked{" "}
+            <span className="text-emerald-400">Questions</span>
+          </h2>
+          <p className="text-neutral-400 max-w-lg mx-auto text-base">
+            Everything you need to know about the NumberMind code-breaking deduction game.
+          </p>
+        </div>
+      </FadeIn>
+
+      <div className="max-w-3xl mx-auto space-y-4">
+        {faqs.map((faq, i) => (
+          <FadeIn key={i} delay={i * 0.07}>
+            <div
+              className="border border-neutral-800 bg-neutral-900/60 rounded-2xl p-6 hover:border-neutral-700 transition-colors"
+              itemScope
+              itemType="https://schema.org/Question"
+            >
+              <h3
+                className="text-base font-black text-white mb-3 flex items-start gap-3"
+                itemProp="name"
+              >
+                <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xs font-black">
+                  Q
+                </span>
+                {faq.q}
+              </h3>
+              <div itemProp="acceptedAnswer" itemScope itemType="https://schema.org/Answer">
+                <p className="text-neutral-400 text-sm leading-relaxed pl-9" itemProp="text">
+                  {faq.a}
+                </p>
+              </div>
+            </div>
+          </FadeIn>
+        ))}
+      </div>
+
+      {/* About section for additional keyword content */}
+      <FadeIn delay={0.3}>
+        <div className="mt-16 max-w-3xl mx-auto border border-neutral-800 bg-neutral-900/40 rounded-3xl p-8">
+          <h2 className="text-2xl font-black text-white uppercase italic tracking-tight mb-4">
+            About{" "}
+            <span className="text-emerald-400">NumberMind</span>
+          </h2>
+          <div className="text-neutral-400 text-sm leading-relaxed space-y-3">
+            <p>
+              <strong className="text-neutral-200">NumberMind</strong> is a browser-based multiplayer
+              code-breaking game inspired by classic logic puzzles like Bulls &amp; Cows and Mastermind.
+              Unlike single-player brain teasers, NumberMind pits two real players against each other
+              in a race of deduction and strategy.
+            </p>
+            <p>
+              Each player selects a secret 4-digit number with unique digits. Guesses receive feedback
+              clues: how many digits are correct (but in the wrong position) and how many are an exact
+              match (correct digit, correct position). Using this information, skilled players can
+              systematically eliminate possibilities and crack the code in as few as 3–5 rounds.
+            </p>
+            <p>
+              Whether you're a fan of <strong className="text-neutral-200">logic puzzles</strong>,{" "}
+              <strong className="text-neutral-200">code-breaking games</strong>, or competitive{" "}
+              <strong className="text-neutral-200">brain teasers</strong>, NumberMind offers endless
+              replay value. Practice your deduction skills against our AI, then challenge the world
+              on the global leaderboard.
+            </p>
+          </div>
+        </div>
+      </FadeIn>
+    </Section>
+  );
+}
+
+// ─────────────────────────────────────────────
 // PAGE EXPORT
 // ─────────────────────────────────────────────
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-50 font-sans selection:bg-emerald-500/30 overflow-x-hidden">
+    <div
+      className="min-h-screen bg-neutral-950 text-neutral-50 font-sans selection:bg-emerald-500/30 overflow-x-hidden"
+      itemScope
+      itemType="https://schema.org/WebPage"
+    >
       <LandingNav />
-      <main>
+      <main
+        id="main-content"
+        aria-label="NumberMind multiplayer code-breaking game"
+        itemProp="mainContentOfPage"
+      >
         <HeroSection />
         <StatsBanner />
         <HowItWorksSection />
         <BenefitsSection />
         <MultiplayerSection />
+        <SEOContentSection />
         <CTASection />
       </main>
       <Footer />
